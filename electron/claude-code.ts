@@ -4,6 +4,7 @@ import { logger } from './logger'
 import * as os from 'os'
 
 let claudeProcess: ChildProcess | null = null
+let currentSessionId: string | null = null
 
 interface ClaudeOutputChunk {
   type: 'text' | 'error' | 'done' | 'start'
@@ -69,8 +70,16 @@ export function startClaudeSession(
       '--verbose',
       '--output-format', 'stream-json',
       '--dangerously-skip-permissions',
-      prompt
+      '--include-partial-messages',
     ]
+
+    // If we have a previous session, resume it to maintain conversation context
+    if (currentSessionId) {
+      args.push('--resume', currentSessionId)
+      logger.info('Claude', 'Resuming session', { sessionId: currentSessionId })
+    }
+
+    args.push(prompt)
 
     logger.debug('Claude', 'Spawning process', { command: claudeBinary, args })
 
@@ -114,30 +123,41 @@ export function startClaudeSession(
           logger.debug('Claude', 'Parsed JSON', { type: parsed.type, keys: Object.keys(parsed) })
 
           // Handle different message types from Claude CLI stream-json format
-          // We only use 'result' type since 'assistant' contains the same content
-          // and would cause duplicate output
-          if (parsed.type === 'assistant') {
-            // Log but don't send - we'll use 'result' instead to avoid duplication
-            logger.debug('Claude', 'Received assistant message (skipping, will use result)', {
-              contentBlocks: parsed.message?.content?.length
+          // We use 'assistant' for streaming text as it arrives, and skip 'result'
+          // to avoid duplicate output
+          if (parsed.type === 'assistant' && parsed.message?.content) {
+            // Stream text from assistant message content blocks
+            logger.info('Claude', 'Received assistant message', {
+              contentBlocks: parsed.message.content.length
             })
+            for (const block of parsed.message.content) {
+              if (block.type === 'text' && block.text) {
+                logger.debug('Claude', 'Sending text block', { length: block.text.length })
+                mainWindow.webContents.send('claude-output', {
+                  type: 'text',
+                  content: block.text,
+                } as ClaudeOutputChunk)
+              }
+            }
           } else if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-            // Streaming delta - for real-time streaming if needed
+            // Streaming delta - for real-time token-by-token streaming
             logger.debug('Claude', 'Sending delta', { length: parsed.delta.text.length })
             mainWindow.webContents.send('claude-output', {
               type: 'text',
               content: parsed.delta.text,
             } as ClaudeOutputChunk)
-          } else if (parsed.type === 'result' && parsed.result) {
-            // Final result - this is the complete response
-            logger.info('Claude', 'Received result', { length: parsed.result.length })
-            mainWindow.webContents.send('claude-output', {
-              type: 'text',
-              content: parsed.result,
-            } as ClaudeOutputChunk)
+          } else if (parsed.type === 'result') {
+            // Final result - skip this since we already got content from 'assistant'
+            logger.info('Claude', 'Received result (skipping, already streamed)', {
+              length: parsed.result?.length
+            })
           } else if (parsed.type === 'system') {
-            // System messages (init, etc.) - just log them
+            // System messages (init, etc.) - capture session_id for conversation continuity
             logger.debug('Claude', 'Received system message', { subtype: parsed.subtype })
+            if (parsed.subtype === 'init' && parsed.session_id) {
+              currentSessionId = parsed.session_id
+              logger.info('Claude', 'Captured session ID for continuity', { sessionId: currentSessionId })
+            }
           } else {
             // Unknown message type - log it for debugging
             logger.debug('Claude', 'Other message type', { type: parsed.type })
@@ -168,19 +188,27 @@ export function startClaudeSession(
 
     claudeProcess.on('close', (code) => {
       logger.info('Claude', 'Process closed', { exitCode: code, remainingBuffer: buffer.length })
-      // Process any remaining buffer
+      // Process any remaining buffer - but skip 'result' type to avoid duplication
       if (buffer.trim()) {
         logger.debug('Claude', 'Processing remaining buffer', { buffer: buffer.substring(0, 200) })
         try {
           const parsed = JSON.parse(buffer)
-          if (parsed.result) {
-            logger.info('Claude', 'Final result from buffer', { length: parsed.result.length })
-            mainWindow.webContents.send('claude-output', {
-              type: 'text',
-              content: parsed.result,
-            } as ClaudeOutputChunk)
+          // Only send if it's an assistant message with content, not a result
+          if (parsed.type === 'assistant' && parsed.message?.content) {
+            for (const block of parsed.message.content) {
+              if (block.type === 'text' && block.text) {
+                mainWindow.webContents.send('claude-output', {
+                  type: 'text',
+                  content: block.text,
+                } as ClaudeOutputChunk)
+              }
+            }
+          } else if (parsed.type !== 'result' && parsed.type !== 'system') {
+            // Non-JSON or unknown type - send as text
+            logger.debug('Claude', 'Buffer has unknown type, skipping')
           }
         } catch {
+          // Not valid JSON - send as raw text
           logger.debug('Claude', 'Buffer not JSON, sending as text')
           mainWindow.webContents.send('claude-output', {
             type: 'text',
@@ -247,4 +275,19 @@ export function stopClaudeSession(): void {
  */
 export function isClaudeSessionActive(): boolean {
   return claudeProcess !== null && !claudeProcess.killed
+}
+
+/**
+ * Clear the current session ID to start a fresh conversation
+ */
+export function clearClaudeSession(): void {
+  logger.info('Claude', 'Clearing session', { previousSessionId: currentSessionId })
+  currentSessionId = null
+}
+
+/**
+ * Get the current session ID
+ */
+export function getClaudeSessionId(): string | null {
+  return currentSessionId
 }

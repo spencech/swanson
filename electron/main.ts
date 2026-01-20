@@ -3,7 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { login, logout, getAuthState, stopAuthServer } from './auth'
 import { getSetting, setSetting, getSettings } from './store'
-import { startClaudeSession, stopClaudeSession, isClaudeSessionActive } from './claude-code'
+import { startClaudeSession, stopClaudeSession, isClaudeSessionActive, clearClaudeSession } from './claude-code'
 
 // ESM compatibility for __dirname
 const __filename = fileURLToPath(import.meta.url)
@@ -107,6 +107,11 @@ ipcMain.handle('claude:stop', () => {
 
 ipcMain.handle('claude:is-active', () => {
   return isClaudeSessionActive()
+})
+
+ipcMain.handle('claude:clear-session', () => {
+  clearClaudeSession()
+  return { success: true }
 })
 
 // Cleanup on app quit

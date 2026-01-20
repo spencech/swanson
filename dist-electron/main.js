@@ -307,6 +307,7 @@ class Logger {
 }
 const logger = new Logger();
 let claudeProcess = null;
+let currentSessionId = null;
 function startClaudeSession(mainWindow2, prompt, workingDirectory) {
   var _a, _b;
   if (claudeProcess) {
@@ -350,8 +351,13 @@ function startClaudeSession(mainWindow2, prompt, workingDirectory) {
       "--output-format",
       "stream-json",
       "--dangerously-skip-permissions",
-      prompt
+      "--include-partial-messages"
     ];
+    if (currentSessionId) {
+      args.push("--resume", currentSessionId);
+      logger.info("Claude", "Resuming session", { sessionId: currentSessionId });
+    }
+    args.push(prompt);
     logger.debug("Claude", "Spawning process", { command: claudeBinary, args });
     const envWithPath = {
       ...process.env,
@@ -379,24 +385,35 @@ function startClaudeSession(mainWindow2, prompt, workingDirectory) {
         try {
           const parsed = JSON.parse(line);
           logger.debug("Claude", "Parsed JSON", { type: parsed.type, keys: Object.keys(parsed) });
-          if (parsed.type === "assistant") {
-            logger.debug("Claude", "Received assistant message (skipping, will use result)", {
-              contentBlocks: (_b2 = (_a2 = parsed.message) == null ? void 0 : _a2.content) == null ? void 0 : _b2.length
+          if (parsed.type === "assistant" && ((_a2 = parsed.message) == null ? void 0 : _a2.content)) {
+            logger.info("Claude", "Received assistant message", {
+              contentBlocks: parsed.message.content.length
             });
-          } else if (parsed.type === "content_block_delta" && ((_c = parsed.delta) == null ? void 0 : _c.text)) {
+            for (const block of parsed.message.content) {
+              if (block.type === "text" && block.text) {
+                logger.debug("Claude", "Sending text block", { length: block.text.length });
+                mainWindow2.webContents.send("claude-output", {
+                  type: "text",
+                  content: block.text
+                });
+              }
+            }
+          } else if (parsed.type === "content_block_delta" && ((_b2 = parsed.delta) == null ? void 0 : _b2.text)) {
             logger.debug("Claude", "Sending delta", { length: parsed.delta.text.length });
             mainWindow2.webContents.send("claude-output", {
               type: "text",
               content: parsed.delta.text
             });
-          } else if (parsed.type === "result" && parsed.result) {
-            logger.info("Claude", "Received result", { length: parsed.result.length });
-            mainWindow2.webContents.send("claude-output", {
-              type: "text",
-              content: parsed.result
+          } else if (parsed.type === "result") {
+            logger.info("Claude", "Received result (skipping, already streamed)", {
+              length: (_c = parsed.result) == null ? void 0 : _c.length
             });
           } else if (parsed.type === "system") {
             logger.debug("Claude", "Received system message", { subtype: parsed.subtype });
+            if (parsed.subtype === "init" && parsed.session_id) {
+              currentSessionId = parsed.session_id;
+              logger.info("Claude", "Captured session ID for continuity", { sessionId: currentSessionId });
+            }
           } else {
             logger.debug("Claude", "Other message type", { type: parsed.type });
           }
@@ -421,17 +438,23 @@ function startClaudeSession(mainWindow2, prompt, workingDirectory) {
       }
     });
     claudeProcess.on("close", (code) => {
+      var _a2;
       logger.info("Claude", "Process closed", { exitCode: code, remainingBuffer: buffer.length });
       if (buffer.trim()) {
         logger.debug("Claude", "Processing remaining buffer", { buffer: buffer.substring(0, 200) });
         try {
           const parsed = JSON.parse(buffer);
-          if (parsed.result) {
-            logger.info("Claude", "Final result from buffer", { length: parsed.result.length });
-            mainWindow2.webContents.send("claude-output", {
-              type: "text",
-              content: parsed.result
-            });
+          if (parsed.type === "assistant" && ((_a2 = parsed.message) == null ? void 0 : _a2.content)) {
+            for (const block of parsed.message.content) {
+              if (block.type === "text" && block.text) {
+                mainWindow2.webContents.send("claude-output", {
+                  type: "text",
+                  content: block.text
+                });
+              }
+            }
+          } else if (parsed.type !== "result" && parsed.type !== "system") {
+            logger.debug("Claude", "Buffer has unknown type, skipping");
           }
         } catch {
           logger.debug("Claude", "Buffer not JSON, sending as text");
@@ -473,6 +496,10 @@ function stopClaudeSession() {
 }
 function isClaudeSessionActive() {
   return claudeProcess !== null && !claudeProcess.killed;
+}
+function clearClaudeSession() {
+  logger.info("Claude", "Clearing session", { previousSessionId: currentSessionId });
+  currentSessionId = null;
 }
 const __filename$1 = url.fileURLToPath(typeof document === "undefined" ? require("url").pathToFileURL(__filename).href : _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("main.js", document.baseURI).href);
 const __dirname$1 = path.dirname(__filename$1);
@@ -552,6 +579,10 @@ electron.ipcMain.handle("claude:stop", () => {
 });
 electron.ipcMain.handle("claude:is-active", () => {
   return isClaudeSessionActive();
+});
+electron.ipcMain.handle("claude:clear-session", () => {
+  clearClaudeSession();
+  return { success: true };
 });
 electron.app.on("before-quit", () => {
   stopAuthServer();

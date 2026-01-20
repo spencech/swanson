@@ -23,6 +23,7 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
     start: (prompt, workingDirectory) => electron.ipcRenderer.invoke("claude:start", prompt, workingDirectory),
     stop: () => electron.ipcRenderer.invoke("claude:stop"),
     isActive: () => electron.ipcRenderer.invoke("claude:is-active"),
+    clearSession: () => electron.ipcRenderer.invoke("claude:clear-session"),
     onOutput: (callback) => {
       const handler = (_event, chunk) => callback(chunk);
       electron.ipcRenderer.on("claude-output", handler);

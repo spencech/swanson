@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('claude:start', prompt, workingDirectory),
     stop: (): Promise<{ success: boolean }> => ipcRenderer.invoke('claude:stop'),
     isActive: (): Promise<boolean> => ipcRenderer.invoke('claude:is-active'),
+    clearSession: (): Promise<{ success: boolean }> => ipcRenderer.invoke('claude:clear-session'),
     onOutput: (callback: (chunk: ClaudeOutputChunk) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, chunk: ClaudeOutputChunk) => callback(chunk)
       ipcRenderer.on('claude-output', handler)
@@ -86,6 +87,7 @@ declare global {
         start: (prompt: string, workingDirectory?: string) => Promise<{ success: boolean }>
         stop: () => Promise<{ success: boolean }>
         isActive: () => Promise<boolean>
+        clearSession: () => Promise<{ success: boolean }>
         onOutput: (callback: (chunk: ClaudeOutputChunk) => void) => () => void
       }
     }

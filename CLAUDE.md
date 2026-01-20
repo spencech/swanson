@@ -27,14 +27,119 @@ tasks:
     breakpoint: true  # Optional: pause for human review
 ```
 
+## Branching Strategy (REQUIRED)
+
+**Never target primary branches (main, develop, master) directly.** All spawnee plans must use an isolated integration branch pattern.
+
+### Integration Branch Pattern
+
+Every plan establishes a **spawnee integration branch** that serves as the base for all tasks. When a JIRA ticket is available, include it in the branch name:
+
+```
+spawnee/<TICKET>-<feature-description>
+```
+
+Examples:
+- `spawnee/PD-1682-sso-integrations`
+- `spawnee/PD-2041-payment-refactor`
+- `spawnee/user-preferences` (when no ticket exists)
+
+### How It Works
+
+1. **Set the integration branch as `branch` and `baseBranch`** at the template level for all repositories
+2. **Each task checks out its own feature branch** from the integration branch
+3. **PRs merge back to the integration branch**, not to develop/main
+4. **After all tasks complete**, a human reviews and merges the integration branch to the primary branch
+
+### Task Branch Naming
+
+Each task creates its own branch from the integration branch:
+
+```bash
+# Task checks out the integration branch first
+git checkout spawnee/PD-1682-sso-integrations
+
+# Then creates its own feature branch
+git checkout -b spawnee/PD-1682-secret-infrastructure
+```
+
+Use descriptive suffixes that indicate what the task does:
+- `spawnee/PD-1682-secret-infrastructure` (infra repo)
+- `spawnee/PD-1682-frontend-environment` (frontend repo)
+- `spawnee/PD-1682-api-endpoints` (backend repo)
+
+### Template Example
+
+```yaml
+name: "PD-1682 SSO Integrations"
+repository:
+  url: "https://github.com/owner/frontend.git"
+  branch: "spawnee/PD-1682-sso-integrations"
+  baseBranch: "spawnee/PD-1682-sso-integrations"
+model: "composer-1"
+
+tasks:
+  - id: infra-secrets
+    name: "Set up secret infrastructure"
+    repository:
+      url: "https://github.com/owner/infra.git"
+      branch: "spawnee/PD-1682-sso-integrations"
+      baseBranch: "spawnee/PD-1682-sso-integrations"
+    prompt: |
+      ## Branch Setup
+      ```bash
+      git checkout spawnee/PD-1682-sso-integrations
+      git checkout -b spawnee/PD-1682-secret-infrastructure
+      ```
+
+      ## Task
+      Configure secrets for SSO integration...
+
+      ## PR
+      Create a PR targeting `spawnee/PD-1682-sso-integrations` (NOT develop/main).
+    dependsOn: []
+
+  - id: frontend-sso
+    name: "Implement SSO frontend"
+    prompt: |
+      ## Branch Setup
+      ```bash
+      git fetch origin
+      git checkout spawnee/PD-1682-sso-integrations
+      git checkout -b spawnee/PD-1682-frontend-sso
+      ```
+
+      ## Task
+      Implement SSO login flow...
+
+      ## PR
+      Create a PR targeting `spawnee/PD-1682-sso-integrations` (NOT develop/main).
+    dependsOn:
+      - infra-secrets
+```
+
+### Pre-requisite: Create the Integration Branch
+
+Before running spawnee, manually create the integration branch in each repository:
+
+```bash
+# In each repository
+git checkout develop
+git pull origin develop
+git checkout -b spawnee/PD-1682-sso-integrations
+git push -u origin spawnee/PD-1682-sso-integrations
+```
+
 ## Available Models
 
 Query live models with `spawnee models`. Known working models:
+- `composer-1` - Cursor's general-purpose agent model **(DEFAULT - use this for all plans)**
 - `claude-4.5-opus-high-thinking` - Best for complex reasoning tasks
-- `composer-1` - Cursor's general-purpose agent model
 - `gpt-5.2` - OpenAI model
 - `gpt-5.2-high` - OpenAI model with higher compute
 - `gemini-3-pro` - Google model
+
+**Default model**: Always use `composer-1` unless there's a specific reason to use another model.
 
 **Important**: The `/v0/models` endpoint only returns models available for Cloud Agents API, which differs from models in Cursor IDE. Models like `composer-1` work even if not listed.
 
@@ -124,51 +229,84 @@ This enables multi-repository and multi-branch orchestration in a single templat
 ## Example: Multi-Repository Template
 
 ```yaml
-name: "Cross-Repo Feature"
+name: "PD-2041 User Preferences"
 repository:
   url: "https://github.com/owner/frontend.git"
-  branch: "main"
-model: "claude-4.5-opus-high-thinking"
+  branch: "spawnee/PD-2041-user-preferences"
+  baseBranch: "spawnee/PD-2041-user-preferences"
+model: "composer-1"
 
 tasks:
   - id: api-changes
     name: "Update API endpoints"
-    repository:  # Different repo
+    repository:
       url: "https://github.com/owner/backend.git"
-      branch: "develop"
-    model: "composer-1"  # Different model
+      branch: "spawnee/PD-2041-user-preferences"
+      baseBranch: "spawnee/PD-2041-user-preferences"
     prompt: |
+      ## Branch Setup
+      ```bash
+      git checkout spawnee/PD-2041-user-preferences
+      git checkout -b spawnee/PD-2041-api-endpoints
+      ```
+
+      ## Task
       Add new /users/preferences endpoint that returns user settings.
       Include proper error handling and validation.
+
+      ## PR
+      Create a PR targeting `spawnee/PD-2041-user-preferences` (NOT develop/main).
     dependsOn: []
 
   - id: frontend-integration
     name: "Integrate new API"
-    branch: "feature/preferences"  # Different branch, same repo
     prompt: |
-      First, pull the latest changes.
+      ## Branch Setup
+      ```bash
+      git fetch origin
+      git checkout spawnee/PD-2041-user-preferences
+      git checkout -b spawnee/PD-2041-frontend-integration
+      ```
+
+      ## Task
       Call the new /users/preferences endpoint from the settings page.
       Display preferences in a form that allows editing.
+
+      ## PR
+      Create a PR targeting `spawnee/PD-2041-user-preferences` (NOT develop/main).
     dependsOn:
       - api-changes
 
   - id: add-tests
     name: "Add integration tests"
-    branch: "feature/preferences"
     prompt: |
-      First, pull the latest changes.
+      ## Branch Setup
+      ```bash
+      git fetch origin
+      git checkout spawnee/PD-2041-user-preferences
+      git pull origin spawnee/PD-2041-user-preferences
+      git checkout -b spawnee/PD-2041-integration-tests
+      ```
+
+      ## Task
       Write integration tests for the preferences feature.
+
+      ## PR
+      Create a PR targeting `spawnee/PD-2041-user-preferences` (NOT develop/main).
     dependsOn:
       - frontend-integration
 ```
 
 ## Best Practices
 
-1. **Use descriptive task IDs** - They appear in logs and status output
-2. **Write detailed prompts** - Agents work autonomously; be specific
-3. **Set breakpoints strategically** - Before critical dependent tasks
-4. **Parallelize independent work** - Tasks with no dependencies run concurrently
-5. **Use task-level overrides** - When tasks target different repos or need different models
+1. **Always use integration branches** - Never target develop/main directly; use `spawnee/<TICKET>-<description>` pattern
+2. **Include JIRA ticket in branch names** - When available, always include the ticket number (e.g., `spawnee/PD-1682-feature`)
+3. **Use `composer-1` as default model** - Only change models when there's a specific need
+4. **Use descriptive task IDs** - They appear in logs and status output
+5. **Write detailed prompts** - Agents work autonomously; be specific about branch setup, task, and PR target
+6. **Set breakpoints strategically** - Before critical dependent tasks
+7. **Parallelize independent work** - Tasks with no dependencies run concurrently
+8. **Use task-level overrides** - When tasks target different repos or need different models
 
 ## Running Templates
 

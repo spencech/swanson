@@ -2,8 +2,11 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { login, logout, getAuthState, stopAuthServer } from './auth'
-import { getSetting, setSetting, getSettings } from './store'
+import { getSetting, setSetting, getSettings, getGitHubAuth, clearGitHubAuth, setGitHubAuth } from './store'
 import { startClaudeSession, stopClaudeSession, isClaudeSessionActive, clearClaudeSession } from './claude-code'
+import { startGitHubDeviceFlow, pollDeviceCodeToken } from './github-auth'
+import { getAuthenticatedUser } from './github-api'
+import { loadRepositories } from './repos'
 
 // ESM compatibility for __dirname
 const __filename = fileURLToPath(import.meta.url)
@@ -78,6 +81,172 @@ ipcMain.handle('auth:logout', () => {
 
 ipcMain.handle('auth:get-state', () => {
   return getAuthState()
+})
+
+// GitHub handlers
+ipcMain.handle('github:start-auth', async () => {
+  if (!mainWindow) throw new Error('No main window')
+  try {
+    const flow = await startGitHubDeviceFlow()
+    return {
+      success: true,
+      userCode: flow.userCode,
+      verificationUri: flow.verificationUri,
+    }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('github:open-verification-uri', async (_event, uri: string) => {
+  const { shell } = await import('electron')
+  await shell.openExternal(uri)
+  return { success: true }
+})
+
+ipcMain.handle('github:poll-token', async () => {
+  console.log('github:poll-token: IPC handler called')
+  try {
+    // Poll using stored device code (doesn't start a new flow)
+    console.log('github:poll-token: About to call pollDeviceCodeToken')
+    const tokenData = await pollDeviceCodeToken()
+    console.log('github:poll-token: pollDeviceCodeToken succeeded', { hasToken: !!tokenData })
+    
+    // Only fetch user info if we successfully got a token
+    // (pollDeviceCodeToken throws AUTHORIZATION_PENDING if still waiting)
+    console.log('github:poll-token: About to call getAuthenticatedUser')
+    const user = await getAuthenticatedUser()
+    console.log('github:poll-token: getAuthenticatedUser succeeded', { user: user.login })
+    
+    // Update store with user info and clear device code (only after everything succeeds)
+    setGitHubAuth({
+      user: {
+        login: user.login,
+        name: user.name,
+        avatarUrl: user.avatar_url,
+      },
+      // Clear device code now that we have token and user info
+      deviceCode: undefined,
+      deviceCodeExpiresAt: undefined,
+      deviceCodeInterval: undefined,
+    })
+
+    console.log('github:poll-token: Stored user info and cleared device code')
+
+    if (mainWindow) {
+      console.log('github:poll-token: Sending github-auth-success event')
+      mainWindow.webContents.send('github-auth-success', {
+        user: {
+          login: user.login,
+          name: user.name,
+          avatarUrl: user.avatar_url,
+        },
+      })
+    }
+
+    const response = {
+      success: true,
+      user: {
+        login: user.login,
+        name: user.name,
+        avatarUrl: user.avatar_url,
+      },
+    }
+    console.log('github:poll-token: Returning success response', response)
+    return response
+  } catch (error) {
+    const errorMessage = (error as Error).message
+    // Return pending status for expected polling states
+    if (
+      errorMessage === 'AUTHORIZATION_PENDING' ||
+      errorMessage === 'SLOW_DOWN' ||
+      errorMessage.includes('authorization_pending') ||
+      errorMessage.includes('slow_down')
+    ) {
+      // Get the current interval from store to return to frontend
+      const auth = getGitHubAuth()
+      return { 
+        success: false, 
+        pending: true, 
+        error: null,
+        recommendedInterval: auth?.deviceCodeInterval || 5, // Return current interval in seconds
+      }
+    }
+    // Log other errors for debugging
+    console.error('GitHub poll error:', errorMessage)
+    return { success: false, error: errorMessage }
+  }
+})
+
+ipcMain.handle('github:get-state', async () => {
+  const auth = getGitHubAuth()
+  
+  // Clear expired device codes immediately
+  if (auth?.deviceCode && auth.deviceCodeExpiresAt && Date.now() >= auth.deviceCodeExpiresAt) {
+    console.log('github:get-state: Clearing expired device code')
+    setGitHubAuth({
+      deviceCode: undefined,
+      deviceCodeExpiresAt: undefined,
+      deviceCodeInterval: undefined,
+    })
+  }
+  
+  if (!auth?.accessToken) {
+    return {
+      isConnected: false,
+      user: null,
+    }
+  }
+
+  try {
+    // Verify token is still valid by fetching user
+    const user = await getAuthenticatedUser()
+    return {
+      isConnected: true,
+      user: {
+        login: user.login,
+        name: user.name,
+        avatarUrl: user.avatar_url,
+      },
+    }
+  } catch (error) {
+    // Token invalid or expired - clear tokens and device codes
+    console.log('github:get-state: Token invalid, clearing auth state')
+    setGitHubAuth({
+      accessToken: undefined,
+      refreshToken: undefined,
+      expiresAt: undefined,
+      user: undefined,
+      deviceCode: undefined,
+      deviceCodeExpiresAt: undefined,
+      deviceCodeInterval: undefined,
+    })
+    return {
+      isConnected: false,
+      user: null,
+    }
+  }
+})
+
+ipcMain.handle('github:logout', () => {
+  console.log('github:logout: Logging out GitHub')
+  clearGitHubAuth()
+  // Verify logout completed
+  const verify = getGitHubAuth()
+  if (Object.keys(verify).length > 0) {
+    console.warn('github:logout: Warning - some auth state remains after logout', Object.keys(verify))
+  }
+  console.log('github:logout: Logout complete')
+  return { success: true }
+})
+
+ipcMain.handle('github:list-repos', async () => {
+  try {
+    const repos = await loadRepositories()
+    return { success: true, repos }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
 })
 
 // Settings handlers

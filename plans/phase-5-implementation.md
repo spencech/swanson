@@ -4,6 +4,8 @@
 
 Add GitHub authentication using OAuth Device Flow to enable repository access. Users will connect both Google (for API gateway) and GitHub (for repo access) during app launch. The static repository list will be replaced with dynamic fetching from the TeachUpbeat GitHub organization.
 
+**Note**: Repository access is read-only. This tool will not push branches, create PRs, or modify repository contents.
+
 ## Prerequisites
 
 ### Create GitHub App (Manual Step)
@@ -15,12 +17,13 @@ Add GitHub authentication using OAuth Device Flow to enable repository access. U
    - **Device flow**: Enable ✓
    - **Callback URL**: Leave empty (device flow doesn't use it)
    - **Webhook**: Disable (uncheck "Active")
-   - **Permissions**:
-     - Repository permissions → Contents: Read and write
-     - Repository permissions → Metadata: Read-only
-     - Organization permissions → Members: Read-only (to list org repos)
-   - **Where can this GitHub App be installed?**: Only on this account
-3. After creation, note the **Client ID** (NOT the App ID)
+  - **Permissions**:
+    - Repository permissions → Contents: **Read-only** (read-only access, no write/push operations)
+    - Repository permissions → Metadata: Read-only
+    - Organization permissions → Members: Read-only (to list org repos)
+  - **Expire user authorization tokens**: **Check ✓** (enables 8-hour token expiration with refresh tokens)
+  - **Where can this GitHub App be installed?**: Only on this account
+3. After creation, note the **Client ID** (NOT the App ID) - **Client ID**: `Iv23liurMNhAe3Pg8exL`
 4. Install the app on the TeachUpbeat organization
 
 ---
@@ -42,6 +45,8 @@ interface StoreSchema {
   }
   github: {
     accessToken?: string
+    refreshToken?: string  // Required for token refresh (6-month validity)
+    expiresAt?: number    // Timestamp when access token expires
     user?: { login: string; name: string; avatarUrl: string }
   }
   settings: { ... }
@@ -49,8 +54,8 @@ interface StoreSchema {
 ```
 
 Add functions:
-- `getGitHubAuth()`: Retrieve GitHub tokens
-- `setGitHubAuth(auth)`: Store GitHub tokens
+- `getGitHubAuth()`: Retrieve GitHub tokens (returns `{ accessToken?, refreshToken?, expiresAt? }`)
+- `setGitHubAuth(auth)`: Store GitHub tokens (accepts `{ accessToken, refreshToken, expiresAt }`)
 - `clearGitHubAuth()`: Clear GitHub tokens
 
 ---
@@ -62,7 +67,7 @@ Add functions:
 Implement GitHub OAuth Device Flow:
 
 ```typescript
-const GITHUB_CLIENT_ID = 'Iv1.xxxxxxxxxx' // From GitHub App
+const GITHUB_CLIENT_ID = 'Iv23liurMNhAe3Pg8exL' // GitHub App Client ID
 
 interface DeviceCodeResponse {
   device_code: string
@@ -74,8 +79,10 @@ interface DeviceCodeResponse {
 
 interface TokenResponse {
   access_token: string
+  refresh_token?: string  // Present when token expiration is enabled
   token_type: string
   scope: string
+  expires_in?: number     // Seconds until expiration (typically 28800 = 8 hours)
 }
 
 export async function startGitHubDeviceFlow(): Promise<{
@@ -83,6 +90,8 @@ export async function startGitHubDeviceFlow(): Promise<{
   verificationUri: string
   pollForToken: () => Promise<TokenResponse>
 }>
+
+export async function refreshGitHubToken(refreshToken: string): Promise<TokenResponse>
 ```
 
 Flow:
@@ -90,13 +99,26 @@ Flow:
 2. Return `user_code` and `verification_uri` to display to user
 3. Open browser to verification URL
 4. Poll `https://github.com/login/oauth/access_token` until user completes auth
-5. Store token via `setGitHubAuth()`
+5. Store tokens and expiration timestamp via `setGitHubAuth()`:
+   - `accessToken`: The access token
+   - `refreshToken`: The refresh token (if present)
+   - `expiresAt`: `Date.now() + (expires_in * 1000)` (if expires_in provided)
 
 Error handling:
 - `authorization_pending`: Continue polling
 - `slow_down`: Increase interval
 - `expired_token`: Restart flow
 - `access_denied`: User rejected
+
+Token refresh:
+- When `expires_in` is present, calculate expiration timestamp
+- Before making API calls, check if token is expired or near expiration (< 5 minutes)
+- Call `refreshGitHubToken()` with stored `refreshToken`
+- POST to `https://github.com/login/oauth/access_token` with:
+  - `client_id`: Your GitHub App Client ID
+  - `grant_type`: `refresh_token`
+  - `refresh_token`: The stored refresh token
+- Update stored tokens with new response
 
 ---
 
@@ -111,6 +133,12 @@ export async function getRepoDetails(token: string, owner: string, repo: string)
 ```
 
 Uses GitHub REST API with token in Authorization header.
+
+**Token refresh integration**:
+- Before each API call, check if token needs refresh (via `getGitHubAuth()`)
+- If expired or near expiration, call `refreshGitHubToken()` first
+- Handle 401 responses by attempting refresh, then retrying the request
+- If refresh fails, clear auth and prompt user to re-authenticate
 
 ---
 
@@ -229,11 +257,34 @@ interface AuthState {
 
 ```typescript
 export async function loadRepositories(): Promise<Repository[]> {
-  const token = getGitHubAuth()?.accessToken
-  if (!token) throw new Error('GitHub not connected')
+  const auth = getGitHubAuth()
+  if (!auth?.accessToken) throw new Error('GitHub not connected')
 
+  // Ensure token is fresh before making API call
+  const token = await ensureValidToken(auth)
+  
   const repos = await listOrgRepos(token, 'TeachUpbeat')
   return repos.filter(r => !r.archived)
+}
+
+async function ensureValidToken(auth: GitHubAuth): Promise<string> {
+  // Check if token is expired or expires soon (< 5 minutes)
+  if (auth.expiresAt && Date.now() >= auth.expiresAt - 5 * 60 * 1000) {
+    if (!auth.refreshToken) {
+      throw new Error('Token expired and no refresh token available')
+    }
+    const refreshed = await refreshGitHubToken(auth.refreshToken)
+    const newAuth = {
+      accessToken: refreshed.access_token,
+      refreshToken: refreshed.refresh_token || auth.refreshToken,
+      expiresAt: refreshed.expires_in 
+        ? Date.now() + (refreshed.expires_in * 1000)
+        : undefined
+    }
+    setGitHubAuth(newAuth)
+    return newAuth.accessToken
+  }
+  return auth.accessToken
 }
 
 export function formatRepoContext(repos: Repository[]): string {
@@ -302,12 +353,19 @@ After implementation, verify:
 - [ ] In chat, ask "What repositories do you have access to?"
 - [ ] Claude lists TeachUpbeat organization repositories
 - [ ] Error handling works (network failure, auth denied, expired code)
+- [ ] Token refresh works automatically when access token expires
+- [ ] Refresh token persists across app restarts
+- [ ] 401 responses trigger token refresh automatically
+- [ ] Repository access is read-only (no write operations attempted)
 
 ---
 
 ## Security Considerations
 
 - **No client secret**: Device flow doesn't require secrets (safe for desktop apps)
-- **Token storage**: GitHub token stored encrypted in electron-store
-- **Scope limitation**: Only request necessary permissions (repo, read:org)
-- **Token refresh**: GitHub tokens don't expire but can be revoked; handle 401 gracefully
+- **Token storage**: GitHub tokens stored encrypted in electron-store
+- **Scope limitation**: Only request necessary permissions (repo read-only, read:org)
+- **Token expiration**: Access tokens expire after 8 hours; refresh tokens valid for 6 months
+- **Token refresh**: Automatically refresh expired tokens using refresh_token before API calls
+- **Read-only access**: Repository permissions set to read-only; no write/push operations
+- **401 handling**: On 401 responses, attempt token refresh; if refresh fails, clear auth and require re-authentication

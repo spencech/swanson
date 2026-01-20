@@ -29,5 +29,17 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
       electron.ipcRenderer.on("claude-output", handler);
       return () => electron.ipcRenderer.removeListener("claude-output", handler);
     }
+  },
+  // GitHub
+  github: {
+    startAuth: () => electron.ipcRenderer.invoke("github:start-auth"),
+    pollToken: () => electron.ipcRenderer.invoke("github:poll-token"),
+    getState: () => electron.ipcRenderer.invoke("github:get-state"),
+    logout: () => electron.ipcRenderer.invoke("github:logout"),
+    listRepos: () => electron.ipcRenderer.invoke("github:list-repos"),
+    openVerificationUri: (uri) => electron.ipcRenderer.invoke("github:open-verification-uri", uri),
+    onAuthSuccess: (callback) => {
+      electron.ipcRenderer.on("github-auth-success", (_event, data) => callback(data.user));
+    }
   }
 });

@@ -8,7 +8,16 @@ function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [appVersion, setAppVersion] = useState<string>('')
 
-  const { isAuthenticated, isLoading: authLoading, user, error: authError, login, logout } = useAuth()
+  const {
+    isAuthenticated,
+    isLoading: authLoading,
+    user,
+    error: authError,
+    login,
+    logout,
+    isGoogleConnected,
+    isGitHubConnected,
+  } = useAuth()
   const { settings, isLoading: settingsLoading, updateSetting } = useSettings()
 
   // Load theme from settings
@@ -48,6 +57,17 @@ function App() {
   }
 
   const isLoading = authLoading || settingsLoading
+  
+  // Log app state
+  useEffect(() => {
+    console.log('App: Render state', {
+      isLoading,
+      isAuthenticated,
+      isGoogleConnected,
+      isGitHubConnected,
+      hasUser: !!user,
+    })
+  }, [isLoading, isAuthenticated, isGoogleConnected, isGitHubConnected, user])
 
   return (
     <div className="h-screen flex flex-col bg-light-bg dark:bg-dark-bg text-light-text-primary dark:text-dark-text-primary">
@@ -112,6 +132,7 @@ function App() {
           onLogin={login}
           isLoading={authLoading}
           error={authError}
+          isGoogleConnected={isGoogleConnected}
         />
       ) : (
         <ChatContainer />

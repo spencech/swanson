@@ -27,6 +27,39 @@ interface ClaudeOutputChunk {
   error?: string
 }
 
+interface GitHubUser {
+  login: string
+  name: string
+  avatarUrl: string
+}
+
+interface GitHubState {
+  isConnected: boolean
+  user: GitHubUser | null
+}
+
+interface GitHubAuthResult {
+  success: boolean
+  pending?: boolean
+  userCode?: string
+  verificationUri?: string
+  user?: GitHubUser
+  error?: string
+  recommendedInterval?: number // Recommended polling interval in seconds (for slow_down)
+}
+
+interface GitHubReposResult {
+  success: boolean
+  repos?: Array<{
+    id: number
+    name: string
+    full_name: string
+    description: string | null
+    html_url: string
+  }>
+  error?: string
+}
+
 interface Window {
   electronAPI: {
     getAppVersion: () => Promise<string>
@@ -42,10 +75,20 @@ interface Window {
       set: (key: string, value: unknown) => Promise<{ success: boolean }>
     }
     claude: {
-      start: (prompt: string) => Promise<{ success: boolean }>
+      start: (prompt: string, workingDirectory?: string) => Promise<{ success: boolean }>
       stop: () => Promise<{ success: boolean }>
       isActive: () => Promise<boolean>
+      clearSession: () => Promise<{ success: boolean }>
       onOutput: (callback: (chunk: ClaudeOutputChunk) => void) => () => void
+    }
+    github: {
+      startAuth: () => Promise<GitHubAuthResult>
+      pollToken: () => Promise<GitHubAuthResult>
+      getState: () => Promise<GitHubState>
+      logout: () => Promise<{ success: boolean }>
+      listRepos: () => Promise<GitHubReposResult>
+      openVerificationUri: (uri: string) => Promise<{ success: boolean }>
+      onAuthSuccess: (callback: (user: GitHubUser) => void) => void
     }
   }
 }

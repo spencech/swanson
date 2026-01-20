@@ -1,4 +1,26 @@
 "use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 const electron = require("electron");
 const path = require("path");
 const url = require("url");
@@ -56,6 +78,84 @@ function setSetting(key, value) {
 }
 function getSetting(key) {
   return store.get(`settings.${key}`);
+}
+function getGitHubAuth() {
+  const auth = store.get("github", {});
+  if (auth && Object.keys(auth).length > 0) {
+    console.log("getGitHubAuth: Retrieved auth", {
+      keys: Object.keys(auth),
+      hasDeviceCode: !!auth.deviceCode,
+      hasAccessToken: !!auth.accessToken
+    });
+  }
+  return auth;
+}
+function setGitHubAuth(auth) {
+  var _a, _b;
+  const current = getGitHubAuth();
+  const merged = { ...current, ...auth };
+  const cleaned = {};
+  for (const [key, value] of Object.entries(merged)) {
+    if (value !== void 0) {
+      cleaned[key] = value;
+    }
+  }
+  console.log("setGitHubAuth: Setting auth", {
+    currentKeys: Object.keys(current),
+    newKeys: Object.keys(auth),
+    newValues: Object.fromEntries(
+      Object.entries(auth).map(([k, v]) => [
+        k,
+        k === "accessToken" || k === "refreshToken" ? v ? `${String(v).substring(0, 10)}...` : "undefined" : v
+      ])
+    ),
+    cleanedKeys: Object.keys(cleaned),
+    cleanedValues: Object.fromEntries(
+      Object.entries(cleaned).map(([k, v]) => [
+        k,
+        k === "accessToken" || k === "refreshToken" ? v ? `${String(v).substring(0, 10)}...` : "undefined" : v
+      ])
+    ),
+    hasDeviceCode: !!cleaned.deviceCode,
+    hasAccessToken: !!cleaned.accessToken
+  });
+  store.set("github", cleaned);
+  const verify = store.get("github", {});
+  console.log("setGitHubAuth: Verification after store.set", {
+    storedKeys: Object.keys(verify),
+    hasAccessToken: !!verify.accessToken,
+    hasDeviceCode: !!verify.deviceCode
+  });
+  if (!verify.deviceCode && auth.deviceCode) {
+    console.error("setGitHubAuth: Device code was not stored!", {
+      requested: ((_a = auth.deviceCode) == null ? void 0 : _a.substring(0, 10)) + "...",
+      stored: verify
+    });
+  }
+  if (!verify.accessToken && auth.accessToken) {
+    console.error("setGitHubAuth: Access token was not stored!", {
+      requested: ((_b = auth.accessToken) == null ? void 0 : _b.substring(0, 10)) + "...",
+      stored: verify
+    });
+  }
+}
+function clearGitHubAuth() {
+  console.log("clearGitHubAuth: Clearing all GitHub auth state");
+  store.set("github", {
+    accessToken: void 0,
+    refreshToken: void 0,
+    expiresAt: void 0,
+    deviceCode: void 0,
+    deviceCodeExpiresAt: void 0,
+    deviceCodeInterval: void 0,
+    user: void 0
+  });
+  const verify = store.get("github", {});
+  if (Object.keys(verify).length > 0) {
+    console.warn("clearGitHubAuth: Warning - some keys remain after clear", Object.keys(verify));
+    store.set("github", {});
+  }
+  console.log("clearGitHubAuth: GitHub auth state cleared");
 }
 const CALLBACK_PORT = 4200;
 const CALLBACK_PATH = "/sso/index.html";
@@ -306,14 +406,321 @@ class Logger {
   }
 }
 const logger = new Logger();
+const GITHUB_CLIENT_ID = "Iv23liurMNhAe3Pg8exL";
+const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
+const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
+const GITHUB_SCOPE = "repo read:org";
+async function startGitHubDeviceFlow() {
+  const response = await fetch(GITHUB_DEVICE_CODE_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify({
+      client_id: GITHUB_CLIENT_ID,
+      scope: GITHUB_SCOPE
+    })
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to start device flow: ${response.statusText}`);
+  }
+  const deviceCodeData = await response.json();
+  console.log("startGitHubDeviceFlow: Storing device code", {
+    deviceCode: deviceCodeData.device_code.substring(0, 10) + "...",
+    expiresIn: deviceCodeData.expires_in,
+    interval: deviceCodeData.interval
+  });
+  setGitHubAuth({
+    deviceCode: deviceCodeData.device_code,
+    deviceCodeExpiresAt: Date.now() + deviceCodeData.expires_in * 1e3,
+    deviceCodeInterval: deviceCodeData.interval
+  });
+  const verifyAuth = getGitHubAuth();
+  if (!(verifyAuth == null ? void 0 : verifyAuth.deviceCode)) {
+    console.error("startGitHubDeviceFlow: Device code was not stored!", { verifyAuth });
+    throw new Error("Failed to store device code");
+  }
+  console.log("startGitHubDeviceFlow: Device code stored successfully");
+  const pollForToken = async () => {
+    return pollDeviceCodeToken();
+  };
+  return {
+    userCode: deviceCodeData.user_code,
+    verificationUri: deviceCodeData.verification_uri,
+    pollForToken
+  };
+}
+async function pollDeviceCodeToken() {
+  var _a;
+  console.log("pollDeviceCodeToken: Function called");
+  const auth = getGitHubAuth();
+  console.log("pollDeviceCodeToken: Checking for device code", {
+    hasAuth: !!auth,
+    authType: typeof auth,
+    authKeys: auth ? Object.keys(auth) : "no auth",
+    hasDeviceCode: !!(auth == null ? void 0 : auth.deviceCode),
+    deviceCodeValue: (auth == null ? void 0 : auth.deviceCode) ? auth.deviceCode.substring(0, 10) + "..." : "undefined",
+    deviceCodeLength: (_a = auth == null ? void 0 : auth.deviceCode) == null ? void 0 : _a.length,
+    expiresAt: auth == null ? void 0 : auth.deviceCodeExpiresAt,
+    currentTime: Date.now(),
+    fullAuth: JSON.stringify(auth)
+  });
+  if (!(auth == null ? void 0 : auth.deviceCode)) {
+    console.error("pollDeviceCodeToken: No device code found!", {
+      auth,
+      authType: typeof auth,
+      authKeys: auth ? Object.keys(auth) : "no auth",
+      fullAuthString: JSON.stringify(auth)
+    });
+    throw new Error("No device code found. Please start the authentication flow again.");
+  }
+  if (auth.deviceCodeExpiresAt && Date.now() >= auth.deviceCodeExpiresAt) {
+    console.log("pollDeviceCodeToken: Device code expired, clearing");
+    setGitHubAuth({
+      deviceCode: void 0,
+      deviceCodeExpiresAt: void 0,
+      deviceCodeInterval: void 0
+    });
+    throw new Error("Device code expired. Please restart the authentication flow.");
+  }
+  let pollInterval = (auth.deviceCodeInterval || 5) * 1e3;
+  auth.deviceCodeExpiresAt || Date.now() + 900 * 1e3;
+  const tokenResponse = await fetch(GITHUB_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify({
+      client_id: GITHUB_CLIENT_ID,
+      device_code: auth.deviceCode,
+      grant_type: "urn:ietf:params:oauth:grant-type:device_code"
+    })
+  });
+  console.log("pollDeviceCodeToken: Token response status", {
+    ok: tokenResponse.ok,
+    status: tokenResponse.status,
+    statusText: tokenResponse.statusText
+  });
+  const responseText = await tokenResponse.text();
+  console.log("pollDeviceCodeToken: Raw response text", responseText.substring(0, 200));
+  const responseData = JSON.parse(responseText);
+  if (responseData.error) {
+    console.log("pollDeviceCodeToken: Error response detected", {
+      error: responseData.error,
+      errorDescription: responseData.error_description,
+      interval: responseData.interval
+    });
+    if (responseData.error === "authorization_pending") {
+      console.log("pollDeviceCodeToken: Throwing AUTHORIZATION_PENDING");
+      throw new Error("AUTHORIZATION_PENDING");
+    } else if (responseData.error === "slow_down") {
+      const newInterval = responseData.interval || pollInterval / 1e3 * 1.5;
+      pollInterval = Math.min(newInterval * 1e3, 6e4);
+      console.log("pollDeviceCodeToken: SLOW_DOWN - updating interval", {
+        oldInterval: auth.deviceCodeInterval,
+        newInterval: pollInterval / 1e3,
+        responseInterval: responseData.interval
+      });
+      setGitHubAuth({
+        deviceCodeInterval: pollInterval / 1e3
+      });
+      console.log("pollDeviceCodeToken: Throwing SLOW_DOWN");
+      throw new Error("SLOW_DOWN");
+    } else if (responseData.error === "expired_token") {
+      console.log("pollDeviceCodeToken: Device code expired, clearing");
+      setGitHubAuth({
+        deviceCode: void 0,
+        deviceCodeExpiresAt: void 0,
+        deviceCodeInterval: void 0
+      });
+      throw new Error("Device code expired. Please restart the authentication flow.");
+    } else if (responseData.error === "access_denied") {
+      setGitHubAuth({
+        deviceCode: void 0,
+        deviceCodeExpiresAt: void 0,
+        deviceCodeInterval: void 0
+      });
+      throw new Error("Access denied. User rejected the authorization request.");
+    } else {
+      throw new Error(`Token request failed: ${responseData.error_description || responseData.error}`);
+    }
+  }
+  console.log("pollDeviceCodeToken: Success! No error in response, parsing token data");
+  if (!tokenResponse.ok) {
+    throw new Error(`Token request failed: ${tokenResponse.statusText}`);
+  }
+  const tokenData = responseData;
+  console.log("pollDeviceCodeToken: Parsed token data", {
+    hasAccessToken: !!tokenData.access_token,
+    hasRefreshToken: !!tokenData.refresh_token,
+    expiresIn: tokenData.expires_in,
+    tokenType: tokenData.token_type,
+    scope: tokenData.scope,
+    accessTokenPreview: tokenData.access_token ? tokenData.access_token.substring(0, 10) + "..." : "undefined",
+    refreshTokenPreview: tokenData.refresh_token ? tokenData.refresh_token.substring(0, 10) + "..." : "undefined",
+    allKeys: Object.keys(tokenData)
+  });
+  const tokensToStore = {
+    accessToken: tokenData.access_token,
+    refreshToken: tokenData.refresh_token,
+    expiresAt: tokenData.expires_in ? Date.now() + tokenData.expires_in * 1e3 : void 0
+  };
+  console.log("pollDeviceCodeToken: About to store tokens", {
+    hasAccessToken: !!tokensToStore.accessToken,
+    hasRefreshToken: !!tokensToStore.refreshToken,
+    expiresAt: tokensToStore.expiresAt
+  });
+  console.log("========================================");
+  console.log("GitHub Access Token:", tokenData.access_token);
+  console.log("========================================");
+  setGitHubAuth(tokensToStore);
+  return tokenData;
+}
+async function refreshGitHubToken(refreshToken) {
+  const response = await fetch(GITHUB_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify({
+      client_id: GITHUB_CLIENT_ID,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken
+    })
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Unknown error" }));
+    throw new Error(`Token refresh failed: ${error.error_description || error.error || response.statusText}`);
+  }
+  const tokenData = await response.json();
+  setGitHubAuth({
+    accessToken: tokenData.access_token,
+    refreshToken: tokenData.refresh_token || refreshToken,
+    // Keep old refresh token if new one not provided
+    expiresAt: tokenData.expires_in ? Date.now() + tokenData.expires_in * 1e3 : void 0
+  });
+  console.log("========================================");
+  console.log("GitHub Access Token (refreshed):", tokenData.access_token);
+  console.log("========================================");
+  return tokenData;
+}
+async function ensureValidGitHubToken() {
+  const auth = getGitHubAuth();
+  if (!(auth == null ? void 0 : auth.accessToken)) {
+    throw new Error("GitHub not connected");
+  }
+  if (auth.expiresAt && Date.now() >= auth.expiresAt - 5 * 60 * 1e3) {
+    if (!auth.refreshToken) {
+      throw new Error("Token expired and no refresh token available");
+    }
+    await refreshGitHubToken(auth.refreshToken);
+    const refreshedAuth = getGitHubAuth();
+    if (!(refreshedAuth == null ? void 0 : refreshedAuth.accessToken)) {
+      throw new Error("Failed to refresh token");
+    }
+    return refreshedAuth.accessToken;
+  }
+  return auth.accessToken;
+}
+async function githubRequest(endpoint) {
+  const token = await ensureValidGitHubToken();
+  const response = await fetch(`https://api.github.com${endpoint}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github.v3+json"
+    }
+  });
+  if (response.status === 401) {
+    const refreshedToken = await ensureValidGitHubToken();
+    const retryResponse = await fetch(`https://api.github.com${endpoint}`, {
+      headers: {
+        Authorization: `Bearer ${refreshedToken}`,
+        Accept: "application/vnd.github.v3+json"
+      }
+    });
+    if (!retryResponse.ok) {
+      throw new Error(`GitHub API error: ${retryResponse.statusText}`);
+    }
+    return retryResponse.json();
+  }
+  if (!response.ok) {
+    throw new Error(`GitHub API error: ${response.statusText}`);
+  }
+  return response.json();
+}
+async function getAuthenticatedUser() {
+  return githubRequest("/user");
+}
+async function listOrgRepos(org) {
+  const repos = [];
+  let page = 1;
+  const perPage = 100;
+  while (true) {
+    const response = await githubRequest(`/orgs/${org}/repos?per_page=${perPage}&page=${page}`);
+    if (response.length === 0) {
+      break;
+    }
+    repos.push(...response);
+    if (response.length < perPage) {
+      break;
+    }
+    page++;
+  }
+  return repos;
+}
+const TEACHUPBEAT_ORG = "TeachUpbeat";
+async function loadRepositories() {
+  const auth = getGitHubAuth();
+  if (!(auth == null ? void 0 : auth.accessToken)) {
+    throw new Error("GitHub not connected");
+  }
+  await ensureValidGitHubToken();
+  const repos = await listOrgRepos(TEACHUPBEAT_ORG);
+  return repos.filter((r) => !r.archived);
+}
+function formatRepoContext(repos) {
+  if (repos.length === 0) {
+    return "No repositories available.";
+  }
+  const repoList = repos.map((repo) => {
+    const parts = [
+      `- **${repo.full_name}**`,
+      repo.description ? `  ${repo.description}` : null,
+      `  Language: ${repo.language || "N/A"}`,
+      `  Default branch: ${repo.default_branch}`,
+      `  URL: ${repo.html_url}`
+    ].filter(Boolean).join("\n");
+    return parts;
+  }).join("\n\n");
+  return `You have read-only access to ${repos.length} repository/repositories in the TeachUpbeat organization:
+
+${repoList}
+
+Note: You can reference these repositories in your responses, but you cannot push branches, create PRs, or modify repository contents.`;
+}
 let claudeProcess = null;
 let currentSessionId = null;
-function startClaudeSession(mainWindow2, prompt, workingDirectory) {
+async function startClaudeSession(mainWindow2, prompt, workingDirectory) {
   var _a, _b;
   if (claudeProcess) {
     stopClaudeSession();
   }
-  logger.info("Claude", "Starting session", { prompt: prompt.substring(0, 100), workingDirectory });
+  let repoContext = "";
+  try {
+    const repos = await loadRepositories();
+    repoContext = formatRepoContext(repos);
+    logger.info("Claude", "Loaded repositories", { count: repos.length });
+  } catch (error) {
+    logger.warn("Claude", "Failed to load repositories", { error: error.message });
+  }
+  const enhancedPrompt = repoContext ? `${prompt}
+
+## Available Repositories
+${repoContext}` : prompt;
+  logger.info("Claude", "Starting session", { prompt: enhancedPrompt.substring(0, 100), workingDirectory });
   mainWindow2.webContents.send("claude-output", {
     type: "start"
   });
@@ -357,7 +764,7 @@ function startClaudeSession(mainWindow2, prompt, workingDirectory) {
       args.push("--resume", currentSessionId);
       logger.info("Claude", "Resuming session", { sessionId: currentSessionId });
     }
-    args.push(prompt);
+    args.push(enhancedPrompt);
     logger.debug("Claude", "Spawning process", { command: claudeBinary, args });
     const envWithPath = {
       ...process.env,
@@ -557,6 +964,142 @@ electron.ipcMain.handle("auth:logout", () => {
 });
 electron.ipcMain.handle("auth:get-state", () => {
   return getAuthState();
+});
+electron.ipcMain.handle("github:start-auth", async () => {
+  if (!mainWindow) throw new Error("No main window");
+  try {
+    const flow = await startGitHubDeviceFlow();
+    return {
+      success: true,
+      userCode: flow.userCode,
+      verificationUri: flow.verificationUri
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+electron.ipcMain.handle("github:open-verification-uri", async (_event, uri) => {
+  const { shell } = await import("electron");
+  await shell.openExternal(uri);
+  return { success: true };
+});
+electron.ipcMain.handle("github:poll-token", async () => {
+  console.log("github:poll-token: IPC handler called");
+  try {
+    console.log("github:poll-token: About to call pollDeviceCodeToken");
+    const tokenData = await pollDeviceCodeToken();
+    console.log("github:poll-token: pollDeviceCodeToken succeeded", { hasToken: !!tokenData });
+    console.log("github:poll-token: About to call getAuthenticatedUser");
+    const user = await getAuthenticatedUser();
+    console.log("github:poll-token: getAuthenticatedUser succeeded", { user: user.login });
+    setGitHubAuth({
+      user: {
+        login: user.login,
+        name: user.name,
+        avatarUrl: user.avatar_url
+      },
+      // Clear device code now that we have token and user info
+      deviceCode: void 0,
+      deviceCodeExpiresAt: void 0,
+      deviceCodeInterval: void 0
+    });
+    console.log("github:poll-token: Stored user info and cleared device code");
+    if (mainWindow) {
+      console.log("github:poll-token: Sending github-auth-success event");
+      mainWindow.webContents.send("github-auth-success", {
+        user: {
+          login: user.login,
+          name: user.name,
+          avatarUrl: user.avatar_url
+        }
+      });
+    }
+    const response = {
+      success: true,
+      user: {
+        login: user.login,
+        name: user.name,
+        avatarUrl: user.avatar_url
+      }
+    };
+    console.log("github:poll-token: Returning success response", response);
+    return response;
+  } catch (error) {
+    const errorMessage = error.message;
+    if (errorMessage === "AUTHORIZATION_PENDING" || errorMessage === "SLOW_DOWN" || errorMessage.includes("authorization_pending") || errorMessage.includes("slow_down")) {
+      const auth = getGitHubAuth();
+      return {
+        success: false,
+        pending: true,
+        error: null,
+        recommendedInterval: (auth == null ? void 0 : auth.deviceCodeInterval) || 5
+        // Return current interval in seconds
+      };
+    }
+    console.error("GitHub poll error:", errorMessage);
+    return { success: false, error: errorMessage };
+  }
+});
+electron.ipcMain.handle("github:get-state", async () => {
+  const auth = getGitHubAuth();
+  if ((auth == null ? void 0 : auth.deviceCode) && auth.deviceCodeExpiresAt && Date.now() >= auth.deviceCodeExpiresAt) {
+    console.log("github:get-state: Clearing expired device code");
+    setGitHubAuth({
+      deviceCode: void 0,
+      deviceCodeExpiresAt: void 0,
+      deviceCodeInterval: void 0
+    });
+  }
+  if (!(auth == null ? void 0 : auth.accessToken)) {
+    return {
+      isConnected: false,
+      user: null
+    };
+  }
+  try {
+    const user = await getAuthenticatedUser();
+    return {
+      isConnected: true,
+      user: {
+        login: user.login,
+        name: user.name,
+        avatarUrl: user.avatar_url
+      }
+    };
+  } catch (error) {
+    console.log("github:get-state: Token invalid, clearing auth state");
+    setGitHubAuth({
+      accessToken: void 0,
+      refreshToken: void 0,
+      expiresAt: void 0,
+      user: void 0,
+      deviceCode: void 0,
+      deviceCodeExpiresAt: void 0,
+      deviceCodeInterval: void 0
+    });
+    return {
+      isConnected: false,
+      user: null
+    };
+  }
+});
+electron.ipcMain.handle("github:logout", () => {
+  console.log("github:logout: Logging out GitHub");
+  clearGitHubAuth();
+  const verify = getGitHubAuth();
+  if (Object.keys(verify).length > 0) {
+    console.warn("github:logout: Warning - some auth state remains after logout", Object.keys(verify));
+  }
+  console.log("github:logout: Logout complete");
+  return { success: true };
+});
+electron.ipcMain.handle("github:list-repos", async () => {
+  try {
+    const repos = await loadRepositories();
+    return { success: true, repos };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 });
 electron.ipcMain.handle("settings:get", (_event, key) => {
   if (key) {

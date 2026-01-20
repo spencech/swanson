@@ -2,6 +2,7 @@ import { spawn, ChildProcess, execFile } from 'child_process'
 import { BrowserWindow } from 'electron'
 import { logger } from './logger'
 import * as os from 'os'
+import { loadRepositories, formatRepoContext } from './repos'
 
 let claudeProcess: ChildProcess | null = null
 let currentSessionId: string | null = null
@@ -15,18 +16,37 @@ interface ClaudeOutputChunk {
 /**
  * Start a Claude Code CLI session
  */
-export function startClaudeSession(
+export async function startClaudeSession(
   mainWindow: BrowserWindow,
   prompt: string,
   workingDirectory?: string
-): void {
+): Promise<void> {
   // Kill any existing session
   if (claudeProcess) {
     stopClaudeSession()
   }
 
+  // Load repositories and format context
+  let repoContext = ''
+  try {
+    const repos = await loadRepositories()
+    repoContext = formatRepoContext(repos)
+    logger.info('Claude', 'Loaded repositories', { count: repos.length })
+  } catch (error) {
+    logger.warn('Claude', 'Failed to load repositories', { error: (error as Error).message })
+    // Continue without repo context if GitHub not connected
+  }
+
+  // Enhance prompt with repository context
+  const enhancedPrompt = repoContext
+    ? `${prompt}
+
+## Available Repositories
+${repoContext}`
+    : prompt
+
   // Notify renderer that we're starting
-  logger.info('Claude', 'Starting session', { prompt: prompt.substring(0, 100), workingDirectory })
+  logger.info('Claude', 'Starting session', { prompt: enhancedPrompt.substring(0, 100), workingDirectory })
   mainWindow.webContents.send('claude-output', {
     type: 'start',
   } as ClaudeOutputChunk)
@@ -79,7 +99,7 @@ export function startClaudeSession(
       logger.info('Claude', 'Resuming session', { sessionId: currentSessionId })
     }
 
-    args.push(prompt)
+    args.push(enhancedPrompt)
 
     logger.debug('Claude', 'Spawning process', { command: claudeBinary, args })
 

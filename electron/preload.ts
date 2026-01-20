@@ -27,6 +27,39 @@ interface ClaudeOutputChunk {
   error?: string
 }
 
+interface GitHubUser {
+  login: string
+  name: string
+  avatarUrl: string
+}
+
+interface GitHubState {
+  isConnected: boolean
+  user: GitHubUser | null
+}
+
+interface GitHubAuthResult {
+  success: boolean
+  pending?: boolean
+  userCode?: string
+  verificationUri?: string
+  user?: GitHubUser
+  error?: string
+  recommendedInterval?: number // Recommended polling interval in seconds (for slow_down)
+}
+
+interface GitHubReposResult {
+  success: boolean
+  repos?: Array<{
+    id: number
+    name: string
+    full_name: string
+    description: string | null
+    html_url: string
+  }>
+  error?: string
+}
+
 // Expose protected methods that allow the renderer process to use
 // ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -65,6 +98,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('claude-output', handler)
     },
   },
+
+  // GitHub
+  github: {
+    startAuth: (): Promise<GitHubAuthResult> => ipcRenderer.invoke('github:start-auth'),
+    pollToken: (): Promise<GitHubAuthResult> => ipcRenderer.invoke('github:poll-token'),
+    getState: (): Promise<GitHubState> => ipcRenderer.invoke('github:get-state'),
+    logout: (): Promise<{ success: boolean }> => ipcRenderer.invoke('github:logout'),
+    listRepos: (): Promise<GitHubReposResult> => ipcRenderer.invoke('github:list-repos'),
+    openVerificationUri: (uri: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke('github:open-verification-uri', uri),
+    onAuthSuccess: (callback: (user: GitHubUser) => void) => {
+      ipcRenderer.on('github-auth-success', (_event, data) => callback(data.user))
+    },
+  },
 })
 
 // Type declarations for the exposed API
@@ -89,6 +136,15 @@ declare global {
         isActive: () => Promise<boolean>
         clearSession: () => Promise<{ success: boolean }>
         onOutput: (callback: (chunk: ClaudeOutputChunk) => void) => () => void
+      }
+      github: {
+        startAuth: () => Promise<GitHubAuthResult>
+        pollToken: () => Promise<GitHubAuthResult>
+        getState: () => Promise<GitHubState>
+        logout: () => Promise<{ success: boolean }>
+        listRepos: () => Promise<GitHubReposResult>
+        openVerificationUri: (uri: string) => Promise<{ success: boolean }>
+        onAuthSuccess: (callback: (user: GitHubUser) => void) => void
       }
     }
   }

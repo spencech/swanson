@@ -708,7 +708,31 @@ async function startClaudeSession(mainWindow2, prompt, workingDirectory) {
   if (claudeProcess) {
     stopClaudeSession();
   }
+  let spawneeGuide = "";
+  let repoDescriptions = "";
   let repoContext = "";
+  try {
+    const claudeMdPath = path__namespace.join(process.cwd(), "CLAUDE.md");
+    if (fs__namespace.existsSync(claudeMdPath)) {
+      spawneeGuide = fs__namespace.readFileSync(claudeMdPath, "utf-8");
+      logger.info("Claude", "Loaded CLAUDE.md spawnee guide");
+    } else {
+      logger.warn("Claude", "CLAUDE.md not found", { path: claudeMdPath });
+    }
+  } catch (error) {
+    logger.warn("Claude", "Failed to load CLAUDE.md", { error: error.message });
+  }
+  try {
+    const reposMdPath = path__namespace.join(process.cwd(), "plans", "repos.md");
+    if (fs__namespace.existsSync(reposMdPath)) {
+      repoDescriptions = fs__namespace.readFileSync(reposMdPath, "utf-8");
+      logger.info("Claude", "Loaded repository descriptions");
+    } else {
+      logger.warn("Claude", "plans/repos.md not found", { path: reposMdPath });
+    }
+  } catch (error) {
+    logger.warn("Claude", "Failed to load repository descriptions", { error: error.message });
+  }
   try {
     const repos = await loadRepositories();
     repoContext = formatRepoContext(repos);
@@ -716,24 +740,62 @@ async function startClaudeSession(mainWindow2, prompt, workingDirectory) {
   } catch (error) {
     logger.warn("Claude", "Failed to load repositories", { error: error.message });
   }
-  const enhancedPrompt = repoContext ? `${prompt}
+  const systemPromptParts = [];
+  systemPromptParts.push(`# You are a Spawnee Expert
 
-## Available Repositories
-${repoContext}` : prompt;
+You are an expert in creating spawnee YAML task templates for orchestrating Cursor Cloud Agents across multiple repositories. Your role is to help users generate comprehensive, well-structured spawnee plans that follow best practices and conventions.`);
+  if (spawneeGuide) {
+    systemPromptParts.push(`## Spawnee Conventions Guide
+
+${spawneeGuide}`);
+  }
+  if (repoDescriptions) {
+    systemPromptParts.push(`## Repository Catalog
+
+${repoDescriptions}`);
+  }
+  if (repoContext) {
+    systemPromptParts.push(`## Available Repositories (Current Access)
+
+${repoContext}`);
+  }
+  systemPromptParts.push(`## Your Task
+
+The user will describe a feature, provide a JIRA ticket number, or ask you to create a spawnee plan. Your job is to:
+
+1. **Understand the requirements** - Parse the user's request and identify what needs to be built
+2. **Identify affected repositories** - Determine which repositories from the catalog need changes
+3. **Create a comprehensive spawnee.yml** - Generate a complete YAML template following all conventions:
+   - Use integration branch pattern: \`spawnee/<TICKET>-<description>\`
+   - Never target develop/main directly
+   - Use \`composer-1\` as the default model
+   - Create appropriate task dependencies
+   - Include detailed prompts with branch setup instructions
+   - Specify PR targets correctly (integration branch, not develop/main)
+4. **Follow best practices** - Prefer fewer tasks with more work, use breakpoints only when requested, parallelize independent work
+
+When generating the spawnee.yml, be thorough, specific, and ensure all tasks include proper branch setup commands and PR targeting instructions.`);
+  const systemPrompt = systemPromptParts.join("\n\n");
+  const enhancedPrompt = `${systemPrompt}
+
+---
+
+## User Request
+
+${prompt}`;
   logger.info("Claude", "Starting session", { prompt: enhancedPrompt.substring(0, 100), workingDirectory });
   mainWindow2.webContents.send("claude-output", {
     type: "start"
   });
   try {
     const home = os__namespace.homedir();
-    const fs2 = require("fs");
     let claudeBinary = "claude";
     const nvmDir = `${home}/.nvm/versions/node`;
-    if (fs2.existsSync(nvmDir)) {
-      const nodeVersions = fs2.readdirSync(nvmDir).sort().reverse();
+    if (fs__namespace.existsSync(nvmDir)) {
+      const nodeVersions = fs__namespace.readdirSync(nvmDir).sort().reverse();
       for (const version of nodeVersions) {
         const candidatePath = `${nvmDir}/${version}/bin/claude`;
-        if (fs2.existsSync(candidatePath)) {
+        if (fs__namespace.existsSync(candidatePath)) {
           claudeBinary = candidatePath;
           break;
         }
@@ -746,7 +808,7 @@ ${repoContext}` : prompt;
         `${home}/.local/bin/claude`
       ];
       for (const path2 of commonPaths) {
-        if (fs2.existsSync(path2)) {
+        if (fs__namespace.existsSync(path2)) {
           claudeBinary = path2;
           break;
         }

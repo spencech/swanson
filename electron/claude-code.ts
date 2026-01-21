@@ -2,6 +2,8 @@ import { spawn, ChildProcess, execFile } from 'child_process'
 import { BrowserWindow } from 'electron'
 import { logger } from './logger'
 import * as os from 'os'
+import * as path from 'path'
+import * as fs from 'fs'
 import { loadRepositories, formatRepoContext } from './repos'
 
 let claudeProcess: ChildProcess | null = null
@@ -26,9 +28,39 @@ export async function startClaudeSession(
     stopClaudeSession()
   }
 
-  // Load repositories and format context
+  // Load system prompts and context
+  let spawneeGuide = ''
+  let repoDescriptions = ''
   let repoContext = ''
+
   try {
+    // Load CLAUDE.md (spawnee conventions guide)
+    const claudeMdPath = path.join(process.cwd(), 'CLAUDE.md')
+    if (fs.existsSync(claudeMdPath)) {
+      spawneeGuide = fs.readFileSync(claudeMdPath, 'utf-8')
+      logger.info('Claude', 'Loaded CLAUDE.md spawnee guide')
+    } else {
+      logger.warn('Claude', 'CLAUDE.md not found', { path: claudeMdPath })
+    }
+  } catch (error) {
+    logger.warn('Claude', 'Failed to load CLAUDE.md', { error: (error as Error).message })
+  }
+
+  try {
+    // Load plans/repos.md (repository descriptions)
+    const reposMdPath = path.join(process.cwd(), 'plans', 'repos.md')
+    if (fs.existsSync(reposMdPath)) {
+      repoDescriptions = fs.readFileSync(reposMdPath, 'utf-8')
+      logger.info('Claude', 'Loaded repository descriptions')
+    } else {
+      logger.warn('Claude', 'plans/repos.md not found', { path: reposMdPath })
+    }
+  } catch (error) {
+    logger.warn('Claude', 'Failed to load repository descriptions', { error: (error as Error).message })
+  }
+
+  try {
+    // Load dynamic repository list from GitHub
     const repos = await loadRepositories()
     repoContext = formatRepoContext(repos)
     logger.info('Claude', 'Loaded repositories', { count: repos.length })
@@ -37,13 +69,57 @@ export async function startClaudeSession(
     // Continue without repo context if GitHub not connected
   }
 
-  // Enhance prompt with repository context
-  const enhancedPrompt = repoContext
-    ? `${prompt}
+  // Build system prompt that primes Claude as a spawnee expert
+  const systemPromptParts: string[] = []
 
-## Available Repositories
-${repoContext}`
-    : prompt
+  systemPromptParts.push(`# You are a Spawnee Expert
+
+You are an expert in creating spawnee YAML task templates for orchestrating Cursor Cloud Agents across multiple repositories. Your role is to help users generate comprehensive, well-structured spawnee plans that follow best practices and conventions.`)
+
+  if (spawneeGuide) {
+    systemPromptParts.push(`## Spawnee Conventions Guide
+
+${spawneeGuide}`)
+  }
+
+  if (repoDescriptions) {
+    systemPromptParts.push(`## Repository Catalog
+
+${repoDescriptions}`)
+  }
+
+  if (repoContext) {
+    systemPromptParts.push(`## Available Repositories (Current Access)
+
+${repoContext}`)
+  }
+
+  systemPromptParts.push(`## Your Task
+
+The user will describe a feature, provide a JIRA ticket number, or ask you to create a spawnee plan. Your job is to:
+
+1. **Understand the requirements** - Parse the user's request and identify what needs to be built
+2. **Identify affected repositories** - Determine which repositories from the catalog need changes
+3. **Create a comprehensive spawnee.yml** - Generate a complete YAML template following all conventions:
+   - Use integration branch pattern: \`spawnee/<TICKET>-<description>\`
+   - Never target develop/main directly
+   - Use \`composer-1\` as the default model
+   - Create appropriate task dependencies
+   - Include detailed prompts with branch setup instructions
+   - Specify PR targets correctly (integration branch, not develop/main)
+4. **Follow best practices** - Prefer fewer tasks with more work, use breakpoints only when requested, parallelize independent work
+
+When generating the spawnee.yml, be thorough, specific, and ensure all tasks include proper branch setup commands and PR targeting instructions.`)
+
+  // Combine system prompt with user prompt
+  const systemPrompt = systemPromptParts.join('\n\n')
+  const enhancedPrompt = `${systemPrompt}
+
+---
+
+## User Request
+
+${prompt}`
 
   // Notify renderer that we're starting
   logger.info('Claude', 'Starting session', { prompt: enhancedPrompt.substring(0, 100), workingDirectory })
@@ -53,7 +129,6 @@ ${repoContext}`
 
   try {
     const home = os.homedir()
-    const fs = require('fs')
 
     // Find the claude binary - check nvm paths first, then common locations
     let claudeBinary = 'claude'

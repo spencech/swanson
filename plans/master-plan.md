@@ -1,13 +1,18 @@
 Quick Reference: Implementation Phases
-PhaseFocusKey Validation1Project Scaffoldingnpm run dev launches Electron window2AuthenticationGoogle SSO flow works, tokens persist3Chat InterfaceMessages display, theme toggle works4Claude Code IntegrationCLI subprocess streams responses5Repository ConfigurationAll 11 repos listed, Claude aware of them6JIRA IntegrationFetch/create tickets, attach files7Plan GenerationValid spawnee.yml with correct conventionsFinalEnd-to-EndFull flow: describe → generate → attach
+PhaseFocusKey Validation1Project Scaffoldingnpm run dev launches Electron window2AuthenticationGoogle SSO flow works, tokens persist3Chat InterfaceMessages display, theme toggle works4Claude Code IntegrationCLI subprocess streams responses5Repository ConfigurationGitHub OAuth, dynamic repo list5bLaunch Screen & WorkspaceRepo selection, local checkout, Claude paths6JIRA IntegrationFetch/create tickets, attach files7Plan GenerationValid spawnee.yml with correct conventionsFinalEnd-to-EndFull flow: describe → generate → attach
 
 Overview
 Swanson is an Electron-based macOS desktop application that provides a chat-style interface for generating spawnee YAML plans. Users describe features or provide JIRA ticket numbers, and the app orchestrates Claude Code (via CLI subprocess) to analyze repositories and generate comprehensive multi-repo spawnee plans.
 Core User Flow
 
-User opens Swanson, authenticates via Google SSO (redirects to existing API gateway → localhost:4200/sso/index.html callback)
+User opens Swanson → Launch screen appears (every launch, even if authenticated)
+If not authenticated: Google SSO → GitHub Device Flow
+User selects which repositories to work with (multi-select, or "I'm not sure")
+App clones/updates repos locally to `~/Library/Application Support/Swanson/repos/`
+  - Infrastructure & database repos always checked out automatically
+  - Selected repos checked out on `develop` branch
 User enters a feature description or existing JIRA ticket (e.g., "PD-1234")
-App invokes Claude Code CLI as subprocess, passing context about available repositories
+App invokes Claude Code CLI as subprocess, passing local repo paths and context
 Claude Code analyzes relevant repos, asks clarifying questions if needed
 Questions surface in chat UI; user responds; responses sent back to Claude Code
 Claude Code generates final spawnee.yml following branching conventions
@@ -269,6 +274,62 @@ upbeat-pdf-generator (pdf-generator)
 upbeat-presentation-generator (google-presentations)
 
 
+Phase 5b: Launch Screen & Repository Workspace
+
+**See detailed implementation plan: [phase-5b-launch-screen.md](./phase-5b-launch-screen.md)**
+
+Overview:
+Add a launch screen that appears every time the app starts, even for authenticated users. Users select which repositories to work with, and the app clones/updates them locally for Claude Code to reference.
+
+Key Features:
+
+- **Automatic repos** (always checked out, no selection):
+  - `upbeat-aws-infrastructure` — for infrastructure changes
+  - `upbeat-engagement-database` — for schema changes
+- **Selectable repos** (user chooses via multi-select):
+  - All other web apps, utilities, and backend services
+- **"I'm not sure" option** — only clones automatic repos, passes metadata to Claude
+- **Local workspace** at `~/Library/Application Support/Swanson/repos/`
+- **Git operations**: Clone on first use, `git pull` on develop for subsequent launches
+- **Parallel cloning** for speed
+
+Files to create/modify:
+
+- `electron/git-ops.ts` — Git clone/pull operations (NEW)
+- `electron/repos.ts` — Repository classification and path formatting
+- `electron/store.ts` — Workspace schema
+- `electron/main.ts` — Workspace IPC handlers
+- `electron/preload.ts` — Expose workspace API
+- `electron/claude-code.ts` — Accept workspace config, inject local paths
+- `src/hooks/useWorkspace.ts` — Workspace state management (NEW)
+- `src/components/LaunchScreen.tsx` — Unified launch flow UI (NEW)
+- `src/App.tsx` — Route through LaunchScreen
+
+✅ Phase 5b Review Checkpoint
+Features to verify:
+
+ Launch screen appears every time app opens (even if authenticated)
+ Authenticated users see "Welcome back, [name]" with repo selector
+ Automatic repos (aws-infrastructure, engagement-database) always cloned/updated
+ User-selected repos are cloned/updated in parallel
+ "I'm not sure" option skips selectable repo cloning
+ Progress UI shows real-time clone/update status
+ Claude receives local paths for checked-out repos
+ Claude is informed about infrastructure/database availability
+ "I'm not sure" mode includes repo metadata and selection guidance for Claude
+ Git errors handled gracefully (network issues, missing branch, etc.)
+
+Your action required:
+
+Launch app fresh (clear auth) — verify full flow: Google → GitHub → Repo select → Setup → Chat
+Close and reopen — verify "Welcome back" screen with repo selector
+Select 2-3 repos and verify they clone to ~/Library/Application Support/Swanson/repos/
+Select "I'm not sure" and verify only automatic repos are cloned
+Start a chat and ask: "What repositories do you have access to locally?"
+Claude should list the checked-out repos with their local paths
+Confirm: "Phase 5b complete" or report any issues
+
+
 Phase 6: JIRA Integration
 Files to create:
 
@@ -375,35 +436,44 @@ swanson/
 │   ├── main.ts              # Main process entry
 │   ├── preload.ts           # IPC bridge
 │   ├── auth.ts              # SSO handling
+│   ├── github-auth.ts       # GitHub Device Flow
+│   ├── github-api.ts        # GitHub REST API client
+│   ├── git-ops.ts           # Git clone/pull operations
 │   ├── claude-code.ts       # CLI subprocess manager
 │   ├── jira.ts              # JIRA API client
-│   ├── repos.ts             # Repository config loader
+│   ├── repos.ts             # Repository classification & paths
 │   ├── plan-manager.ts      # Plan file management
-│   ├── store.ts             # Secure storage
-│   └── ipc-handlers.ts      # All IPC handlers
+│   ├── store.ts             # Secure storage (auth, workspace)
+│   └── logger.ts            # Logging utility
 ├── src/
 │   ├── main.tsx             # React entry
 │   ├── App.tsx              # Root with providers
 │   ├── components/
-│   │   ├── LoginScreen.tsx
+│   │   ├── LaunchScreen.tsx # Unified launch flow (auth + repo select)
 │   │   ├── ChatContainer.tsx
 │   │   ├── MessageList.tsx
 │   │   ├── MessageBubble.tsx
 │   │   ├── ChatInput.tsx
 │   │   ├── ThemeToggle.tsx
-│   │   ├── RepoSelector.tsx
 │   │   ├── TicketDisplay.tsx
 │   │   ├── PlanPreview.tsx
 │   │   └── PlanActions.tsx
 │   ├── hooks/
 │   │   ├── useAuth.ts
+│   │   ├── useGitHub.ts
+│   │   ├── useWorkspace.ts  # Workspace state management
 │   │   └── useClaudeCode.ts
 │   ├── stores/
 │   │   └── chatStore.ts
 │   └── styles/
 │       └── globals.css
 ├── config/
-│   └── repositories.json
+│   └── constants.ts
+├── plans/
+│   ├── master-plan.md
+│   ├── phase-5-implementation.md
+│   ├── phase-5b-launch-screen.md
+│   └── repos.md
 ├── package.json
 ├── tsconfig.json
 ├── tailwind.config.js
@@ -422,6 +492,21 @@ export const SSO_CONFIG = {
   callbackPath: '/sso/index.html'
 };
 
+export const GITHUB_CONFIG = {
+  clientId: 'Iv23liurMNhAe3Pg8exL',
+  org: 'TeachUpbeat'
+};
+
+export const WORKSPACE_CONFIG = {
+  // Repos always checked out (infra + database)
+  automaticRepos: [
+    { name: 'upbeat-aws-infrastructure', url: 'git@github.com:TeachUpbeat/upbeat-aws-infrastructure.git' },
+    { name: 'upbeat-engagement-database', url: 'git@github.com:TeachUpbeat/engagement-database.git' }
+  ],
+  // Default branch to checkout
+  defaultBranch: 'develop'
+};
+
 export const BRANCH_PREFIX = 'spawnee';
 
 🎯 Final End-to-End Validation
@@ -429,7 +514,10 @@ Once all phases are complete, perform this comprehensive test:
 Scenario A: New Feature (No Existing Ticket)
 Steps:
 
-Launch Swanson and sign in via Google SSO
+Launch Swanson → Launch screen appears
+Complete Google SSO and GitHub Device Flow (if not authenticated)
+Select repositories: `upbeat-user-administration`, `upbeat-engagement-database` (auto-selected)
+Wait for workspace setup to complete
 Type: "I want to add a bulk user import feature to the user administration portal"
 Claude should ask clarifying questions — answer them naturally
 Claude generates a spawnee.yml plan
@@ -440,6 +528,9 @@ Download the YAML and review against spawnee conventions
 
 Expected outcome:
 
+ Launch screen appeared with repo selection
+ Selected repos cloned/updated to ~/Library/Application Support/Swanson/repos/
+ Claude referenced local repo paths in analysis
  Ticket created with descriptive title
  Plan attached as spawnee.yml
  Plan uses integration branch: spawnee/PD-XXXX-bulk-user-import
@@ -477,12 +568,46 @@ Expected outcome:
  Dependencies make sense (e.g., API before frontend)
  All tasks share the same integration branch base
 
+Scenario D: "I'm Not Sure" Repository Selection
+Steps:
+
+Close and reopen Swanson
+On launch screen, select "I'm not sure" instead of specific repos
+Wait for workspace setup (only automatic repos should clone)
+Type: "I need to add a new report type that shows coaching outcomes"
+Observe Claude's response
+
+Expected outcome:
+
+ Only aws-infrastructure and engagement-database cloned locally
+ Claude received metadata for all other repos (descriptions, URLs)
+ Claude analyzed the request and identified relevant repos (reports-2.0, possibly others)
+ Claude's plan targets correct repos based on its analysis
+ No errors from missing local repo paths
+
+Scenario E: Re-launch After Authentication
+Steps:
+
+Complete a session (already authenticated)
+Close and reopen Swanson
+Observe launch flow
+
+Expected outcome:
+
+ "Welcome back, [name]" message displayed
+ Repo selector shown immediately (no Google/GitHub auth steps)
+ Previous repo selections NOT pre-checked (fresh selection each time)
+ Automatic repos still update on `develop` branch
+
 
 Security Considerations (SOC2)
 
 Tokens: Stored locally using electron-store with encryption at rest
 JIRA API token: User provides their own token, stored encrypted locally
+GitHub tokens: OAuth tokens with read-only scope, encrypted locally, auto-refresh
 No sensitive data transmitted: Claude Code runs locally, repos cloned locally
+Local repo storage: Repos cloned to ~/Library/Application Support/Swanson/repos/ with user-level permissions
+Git authentication: Relies on user's existing SSH keys for GitHub access
 Audit trail: All generated plans attached to JIRA tickets for traceability
 
 

@@ -1,12 +1,20 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { useSettings } from './hooks/useSettings'
-import { LoginScreen } from './components/LoginScreen'
+import { LaunchScreen } from './components/LaunchScreen'
 import { ChatContainer } from './components/ChatContainer'
+
+interface WorkspaceConfig {
+  checkedOutRepos: Array<{ name: string; path: string; description?: string }>
+  metadataOnlyRepos: Array<{ name: string; description: string }>
+  isUnsure: boolean
+}
 
 function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [appVersion, setAppVersion] = useState<string>('')
+  const [workspaceReady, setWorkspaceReady] = useState(false)
+  const [workspaceConfig, setWorkspaceConfig] = useState<WorkspaceConfig | null>(null)
 
   const {
     isAuthenticated,
@@ -127,15 +135,15 @@ function App() {
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-light-accent dark:border-dark-accent border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : !isAuthenticated ? (
-        <LoginScreen
-          onLogin={login}
-          isLoading={authLoading}
-          error={authError}
-          isGoogleConnected={isGoogleConnected}
+      ) : !workspaceReady ? (
+        <LaunchScreen
+          onWorkspaceReady={(config) => {
+            setWorkspaceConfig(config)
+            setWorkspaceReady(true)
+          }}
         />
       ) : (
-        <ChatContainer />
+        <ChatContainer workspaceConfig={workspaceConfig} />
       )}
     </div>
   )

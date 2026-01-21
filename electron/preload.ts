@@ -60,6 +60,46 @@ interface GitHubReposResult {
   error?: string
 }
 
+interface SelectableRepo {
+  name: string
+  url: string
+  description: string
+}
+
+interface WorkspaceProgress {
+  total: number
+  completed: number
+  current: string
+  repos: Array<{
+    name: string
+    status: 'pending' | 'cloning' | 'updating' | 'done' | 'error'
+    error?: string
+  }>
+}
+
+interface WorkspaceConfig {
+  checkedOutRepos: Array<{
+    name: string
+    path: string
+    description?: string
+  }>
+  metadataOnlyRepos: Array<{
+    name: string
+    description: string
+  }>
+  isUnsure: boolean
+}
+
+interface WorkspaceStatus {
+  success: boolean
+  clonedRepos?: Array<{
+    name: string
+    path: string
+    lastUpdated: number
+  }>
+  error?: string
+}
+
 // Expose protected methods that allow the renderer process to use
 // ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -85,9 +125,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Claude Code
-  claude: {
-    start: (prompt: string, workingDirectory?: string): Promise<{ success: boolean }> =>
-      ipcRenderer.invoke('claude:start', prompt, workingDirectory),
+      claude: {
+        start: (prompt: string, workingDirectory?: string, workspaceConfig?: WorkspaceConfig): Promise<{ success: boolean }> =>
+          ipcRenderer.invoke('claude:start', prompt, workingDirectory, workspaceConfig),
     stop: (): Promise<{ success: boolean }> => ipcRenderer.invoke('claude:stop'),
     isActive: (): Promise<boolean> => ipcRenderer.invoke('claude:is-active'),
     clearSession: (): Promise<{ success: boolean }> => ipcRenderer.invoke('claude:clear-session'),
@@ -112,6 +152,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('github-auth-success', (_event, data) => callback(data.user))
     },
   },
+
+  // Workspace
+  workspace: {
+    getSelectableRepos: (): Promise<{ success: boolean; repos?: SelectableRepo[]; error?: string }> =>
+      ipcRenderer.invoke('workspace:get-selectable-repos'),
+    setup: (selectedRepos: string[], isUnsure: boolean): Promise<{ success: boolean; config?: WorkspaceConfig; error?: string }> =>
+      ipcRenderer.invoke('workspace:setup', selectedRepos, isUnsure),
+    getStatus: (): Promise<WorkspaceStatus> => ipcRenderer.invoke('workspace:get-status'),
+    onProgress: (callback: (progress: WorkspaceProgress) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, progress: WorkspaceProgress) => callback(progress)
+      ipcRenderer.on('workspace:progress', handler)
+      return () => ipcRenderer.removeListener('workspace:progress', handler)
+    },
+  },
 })
 
 // Type declarations for the exposed API
@@ -131,7 +185,7 @@ declare global {
         set: (key: string, value: unknown) => Promise<{ success: boolean }>
       }
       claude: {
-        start: (prompt: string, workingDirectory?: string) => Promise<{ success: boolean }>
+        start: (prompt: string, workingDirectory?: string, workspaceConfig?: WorkspaceConfig) => Promise<{ success: boolean }>
         stop: () => Promise<{ success: boolean }>
         isActive: () => Promise<boolean>
         clearSession: () => Promise<{ success: boolean }>
@@ -145,6 +199,12 @@ declare global {
         listRepos: () => Promise<GitHubReposResult>
         openVerificationUri: (uri: string) => Promise<{ success: boolean }>
         onAuthSuccess: (callback: (user: GitHubUser) => void) => void
+      }
+      workspace: {
+        getSelectableRepos: () => Promise<{ success: boolean; repos?: SelectableRepo[]; error?: string }>
+        setup: (selectedRepos: string[], isUnsure: boolean) => Promise<{ success: boolean; config?: WorkspaceConfig; error?: string }>
+        getStatus: () => Promise<WorkspaceStatus>
+        onProgress: (callback: (progress: WorkspaceProgress) => void) => () => void
       }
     }
   }

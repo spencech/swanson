@@ -6,7 +6,9 @@ import { getSetting, setSetting, getSettings, getGitHubAuth, clearGitHubAuth, se
 import { startClaudeSession, stopClaudeSession, isClaudeSessionActive, clearClaudeSession } from './claude-code'
 import { startGitHubDeviceFlow, pollDeviceCodeToken } from './github-auth'
 import { getAuthenticatedUser } from './github-api'
-import { loadRepositories } from './repos'
+import { loadRepositories, SELECTABLE_REPOS, AUTOMATIC_REPOS, getRepoMetadata, formatRepoContextWithPaths } from './repos'
+import { ensureRepo } from './git-ops'
+import { getClonedRepos } from './store'
 
 // ESM compatibility for __dirname
 const __filename = fileURLToPath(import.meta.url)
@@ -263,9 +265,9 @@ ipcMain.handle('settings:set', (_event, key: string, value: unknown) => {
 })
 
 // Claude Code handlers
-ipcMain.handle('claude:start', (_event, prompt: string, workingDirectory?: string) => {
+ipcMain.handle('claude:start', (_event, prompt: string, workingDirectory?: string, workspaceConfig?: unknown) => {
   if (!mainWindow) throw new Error('No main window')
-  startClaudeSession(mainWindow, prompt, workingDirectory)
+  startClaudeSession(mainWindow, prompt, workingDirectory, workspaceConfig as any)
   return { success: true }
 })
 
@@ -281,6 +283,177 @@ ipcMain.handle('claude:is-active', () => {
 ipcMain.handle('claude:clear-session', () => {
   clearClaudeSession()
   return { success: true }
+})
+
+// Workspace handlers
+ipcMain.handle('workspace:get-selectable-repos', async () => {
+  try {
+    // Load descriptions from GitHub API
+    const reposWithDescriptions = await Promise.all(
+      SELECTABLE_REPOS.map(async (repo) => {
+        const description = await getRepoMetadata(repo.name)
+        return {
+          name: repo.name,
+          url: repo.url,
+          description: description || '',
+        }
+      })
+    )
+    return { success: true, repos: reposWithDescriptions }
+  } catch (error) {
+    // Fallback to repos without descriptions if GitHub API fails
+    return {
+      success: true,
+      repos: SELECTABLE_REPOS.map((repo) => ({
+        name: repo.name,
+        url: repo.url,
+        description: '',
+      })),
+    }
+  }
+})
+
+ipcMain.handle('workspace:setup', async (event, selectedRepoNames: string[], isUnsure: boolean) => {
+  if (!mainWindow) throw new Error('No main window')
+
+  try {
+    const reposToClone: Array<{ url: string; name: string }> = []
+    
+    // Always clone automatic repos
+    reposToClone.push(...AUTOMATIC_REPOS)
+    
+    // Clone selected repos unless user is unsure
+    if (!isUnsure && selectedRepoNames.length > 0) {
+      const selectedRepos = SELECTABLE_REPOS.filter((repo) => selectedRepoNames.includes(repo.name))
+      reposToClone.push(...selectedRepos)
+    }
+
+    // Send initial progress
+    mainWindow.webContents.send('workspace:progress', {
+      total: reposToClone.length,
+      completed: 0,
+      current: '',
+      repos: reposToClone.map((repo) => ({
+        name: repo.name,
+        status: 'pending' as const,
+      })),
+    })
+
+    // Track progress as repos complete
+    let completedCount = 0
+    const results: Array<{ success: boolean; repoName: string; localPath: string; error?: string }> = []
+
+    // Clone repos in parallel, updating progress as each completes
+    await Promise.all(
+      reposToClone.map(async (repo) => {
+        // Update status to cloning
+        mainWindow?.webContents.send('workspace:progress', {
+          total: reposToClone.length,
+          completed: completedCount,
+          current: repo.name,
+          repos: reposToClone.map((r) => ({
+            name: r.name,
+            status: results.find((res) => res.repoName === r.name)?.success
+              ? ('done' as const)
+              : r.name === repo.name
+              ? ('cloning' as const)
+              : results.find((res) => res.repoName === r.name)
+              ? ('error' as const)
+              : ('pending' as const),
+            error: results.find((res) => res.repoName === r.name && !res.success)?.error,
+          })),
+        })
+
+        const result = await ensureRepo(repo.url, repo.name)
+        results.push(result)
+        completedCount++
+
+        // Update status after completion
+        mainWindow?.webContents.send('workspace:progress', {
+          total: reposToClone.length,
+          completed: completedCount,
+          current: repo.name,
+          repos: reposToClone.map((r) => {
+            const res = results.find((res) => res.repoName === r.name)
+            return {
+              name: r.name,
+              status: res?.success ? ('done' as const) : res ? ('error' as const) : ('pending' as const),
+              error: res?.error,
+            }
+          }),
+        })
+
+        return result
+      })
+    )
+
+    // Get metadata for repos that weren't cloned (if unsure)
+    let metadataOnlyRepos: Array<{ name: string; description: string }> = []
+    if (isUnsure) {
+      try {
+        const allRepos = await loadRepositories()
+        const selectedRepos = SELECTABLE_REPOS.filter((repo) => selectedRepoNames.includes(repo.name))
+        metadataOnlyRepos = await Promise.all(
+          selectedRepos.map(async (repo) => {
+            const description = await getRepoMetadata(repo.name) || ''
+            return { name: repo.name, description }
+          })
+        )
+      } catch (error) {
+        // Ignore metadata errors
+      }
+    }
+
+    // Build workspace config
+    const clonedRepos = getClonedRepos()
+    const checkedOutRepos = results
+      .filter((r) => r.success)
+      .map((r) => ({
+        name: r.repoName,
+        path: r.localPath,
+        description: metadataOnlyRepos.find((m) => m.name === r.repoName)?.description,
+      }))
+
+    const workspaceConfig = {
+      checkedOutRepos,
+      metadataOnlyRepos: metadataOnlyRepos.map((r) => ({
+        name: r.name,
+        description: r.description,
+      })),
+      isUnsure,
+    }
+
+    // Send final progress
+    mainWindow.webContents.send('workspace:progress', {
+      total: reposToClone.length,
+      completed: reposToClone.length,
+      current: '',
+      repos: reposToClone.map((repo) => {
+        const result = results.find((r) => r.repoName === repo.name)
+        return {
+          name: repo.name,
+          status: result?.success ? 'done' as const : 'error' as const,
+          error: result?.error,
+        }
+      }),
+    })
+
+    return { success: true, config: workspaceConfig }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('workspace:get-status', async () => {
+  const clonedRepos = getClonedRepos()
+  return {
+    success: true,
+    clonedRepos: Object.entries(clonedRepos).map(([name, info]) => ({
+      name,
+      path: info.path,
+      lastUpdated: info.lastUpdated,
+    })),
+  }
 })
 
 // Cleanup on app quit

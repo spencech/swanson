@@ -102,8 +102,8 @@ export function useClaudeCode() {
     return cleanup
   }, [addMessage, updateMessage, completeMessage, setProcessing])
 
-  const sendMessage = useCallback(async (content: string) => {
-    log.info('useClaudeCode', 'sendMessage called', { contentLength: content.length })
+  const sendMessage = useCallback(async (content: string, workspaceConfig?: unknown) => {
+    log.info('useClaudeCode', 'sendMessage called', { contentLength: content.length, hasWorkspaceConfig: !!workspaceConfig })
 
     if (!window.electronAPI?.claude) {
       log.warn('useClaudeCode', 'Claude API not available, using fallback')
@@ -127,8 +127,8 @@ export function useClaudeCode() {
 
     // Start Claude session
     try {
-      log.info('useClaudeCode', 'Starting Claude session via IPC')
-      await window.electronAPI.claude.start(content)
+      log.info('useClaudeCode', 'Starting Claude session via IPC', { hasWorkspaceConfig: !!workspaceConfig })
+      await window.electronAPI.claude.start(content, undefined, workspaceConfig)
       log.info('useClaudeCode', 'Claude session IPC call returned')
     } catch (error) {
       log.error('useClaudeCode', 'Failed to start Claude session', { error: error instanceof Error ? error.message : error })

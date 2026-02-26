@@ -3,12 +3,22 @@ import { ChatInput } from './ChatInput'
 import { useClaudeCode } from '../hooks/useClaudeCode'
 import { useChatStore } from '../stores/chatStore'
 
-export function ChatContainer() {
+interface WorkspaceConfig {
+  checkedOutRepos: Array<{ name: string; path: string; description?: string }>
+  metadataOnlyRepos: Array<{ name: string; description: string }>
+  isUnsure: boolean
+}
+
+interface ChatContainerProps {
+  workspaceConfig?: WorkspaceConfig | null
+}
+
+export function ChatContainer({ workspaceConfig }: ChatContainerProps) {
   const { sendMessage, stopSession } = useClaudeCode()
   const isProcessing = useChatStore((state) => state.isProcessing)
 
   const handleSend = async (content: string) => {
-    await sendMessage(content)
+    await sendMessage(content, workspaceConfig)
   }
 
   return (

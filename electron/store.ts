@@ -28,6 +28,15 @@ interface StoreSchema {
     jiraEmail?: string
     jiraApiToken?: string
   }
+  workspace: {
+    repoBasePath?: string // ~/Library/Application Support/Swanson/repos/
+    clonedRepos?: {
+      [repoName: string]: {
+        path: string
+        lastUpdated: number
+      }
+    }
+  }
 }
 
 const store = new Store<StoreSchema>({
@@ -160,6 +169,37 @@ export function clearGitHubAuth() {
     store.set('github', {})
   }
   console.log('clearGitHubAuth: GitHub auth state cleared')
+}
+
+// Workspace functions
+export function getWorkspaceConfig(): StoreSchema['workspace'] {
+  return store.get('workspace', {})
+}
+
+export function setClonedRepo(repoName: string, path: string): void {
+  const workspace = getWorkspaceConfig()
+  const clonedRepos = workspace.clonedRepos || {}
+  clonedRepos[repoName] = {
+    path,
+    lastUpdated: Date.now(),
+  }
+  store.set('workspace', {
+    ...workspace,
+    clonedRepos,
+  })
+}
+
+export function getClonedRepos(): Record<string, { path: string; lastUpdated: number }> {
+  const workspace = getWorkspaceConfig()
+  return workspace.clonedRepos || {}
+}
+
+export function setWorkspaceRepoBasePath(repoBasePath: string): void {
+  const workspace = getWorkspaceConfig()
+  store.set('workspace', {
+    ...workspace,
+    repoBasePath,
+  })
 }
 
 export default store

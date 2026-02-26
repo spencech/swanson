@@ -629,3 +629,5 @@ Consider adding artificial chunking of large text blocks for visual streaming ef
 Review Claude CLI documentation for additional streaming options
 
 Priority: Low (functional but not ideal UX)
+
+Also, we need to speed up polling on github

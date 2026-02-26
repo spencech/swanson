@@ -20,7 +20,7 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   },
   // Claude Code
   claude: {
-    start: (prompt, workingDirectory) => electron.ipcRenderer.invoke("claude:start", prompt, workingDirectory),
+    start: (prompt, workingDirectory, workspaceConfig) => electron.ipcRenderer.invoke("claude:start", prompt, workingDirectory, workspaceConfig),
     stop: () => electron.ipcRenderer.invoke("claude:stop"),
     isActive: () => electron.ipcRenderer.invoke("claude:is-active"),
     clearSession: () => electron.ipcRenderer.invoke("claude:clear-session"),
@@ -40,6 +40,17 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
     openVerificationUri: (uri) => electron.ipcRenderer.invoke("github:open-verification-uri", uri),
     onAuthSuccess: (callback) => {
       electron.ipcRenderer.on("github-auth-success", (_event, data) => callback(data.user));
+    }
+  },
+  // Workspace
+  workspace: {
+    getSelectableRepos: () => electron.ipcRenderer.invoke("workspace:get-selectable-repos"),
+    setup: (selectedRepos, isUnsure) => electron.ipcRenderer.invoke("workspace:setup", selectedRepos, isUnsure),
+    getStatus: () => electron.ipcRenderer.invoke("workspace:get-status"),
+    onProgress: (callback) => {
+      const handler = (_event, progress) => callback(progress);
+      electron.ipcRenderer.on("workspace:progress", handler);
+      return () => electron.ipcRenderer.removeListener("workspace:progress", handler);
     }
   }
 });

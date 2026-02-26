@@ -4,7 +4,20 @@ import { logger } from './logger'
 import * as os from 'os'
 import * as path from 'path'
 import * as fs from 'fs'
-import { loadRepositories, formatRepoContext } from './repos'
+import { loadRepositories, formatRepoContext, formatRepoContextWithPaths } from './repos'
+
+interface WorkspaceConfig {
+  checkedOutRepos: Array<{
+    name: string
+    path: string
+    description?: string
+  }>
+  metadataOnlyRepos: Array<{
+    name: string
+    description: string
+  }>
+  isUnsure: boolean
+}
 
 let claudeProcess: ChildProcess | null = null
 let currentSessionId: string | null = null
@@ -21,7 +34,8 @@ interface ClaudeOutputChunk {
 export async function startClaudeSession(
   mainWindow: BrowserWindow,
   prompt: string,
-  workingDirectory?: string
+  workingDirectory?: string,
+  workspaceConfig?: WorkspaceConfig
 ): Promise<void> {
   // Kill any existing session
   if (claudeProcess) {
@@ -59,14 +73,40 @@ export async function startClaudeSession(
     logger.warn('Claude', 'Failed to load repository descriptions', { error: (error as Error).message })
   }
 
-  try {
-    // Load dynamic repository list from GitHub
-    const repos = await loadRepositories()
-    repoContext = formatRepoContext(repos)
-    logger.info('Claude', 'Loaded repositories', { count: repos.length })
-  } catch (error) {
-    logger.warn('Claude', 'Failed to load repositories', { error: (error as Error).message })
-    // Continue without repo context if GitHub not connected
+  // Use workspace config if provided, otherwise fall back to loading from GitHub
+  if (workspaceConfig) {
+    // Convert metadata-only repos to Repository format for formatRepoContextWithPaths
+    const metadataRepos = workspaceConfig.metadataOnlyRepos.map((r) => ({
+      id: 0,
+      name: r.name,
+      full_name: `TeachUpbeat/${r.name}`,
+      description: r.description,
+      html_url: `https://github.com/TeachUpbeat/${r.name}`,
+      language: null,
+      default_branch: 'develop',
+      archived: false,
+    }))
+    
+    repoContext = formatRepoContextWithPaths(
+      workspaceConfig.checkedOutRepos,
+      metadataRepos,
+      workspaceConfig.isUnsure
+    )
+    logger.info('Claude', 'Using workspace config', {
+      checkedOut: workspaceConfig.checkedOutRepos.length,
+      metadataOnly: workspaceConfig.metadataOnlyRepos.length,
+      isUnsure: workspaceConfig.isUnsure,
+    })
+  } else {
+    try {
+      // Load dynamic repository list from GitHub (legacy fallback)
+      const repos = await loadRepositories()
+      repoContext = formatRepoContext(repos)
+      logger.info('Claude', 'Loaded repositories', { count: repos.length })
+    } catch (error) {
+      logger.warn('Claude', 'Failed to load repositories', { error: (error as Error).message })
+      // Continue without repo context if GitHub not connected
+    }
   }
 
   // Build system prompt that primes Claude as a spawnee expert

@@ -30,6 +30,7 @@ const Store = require("electron-store");
 const child_process = require("child_process");
 const fs = require("fs");
 const os = require("os");
+const util = require("util");
 var _documentCurrentScript = typeof document !== "undefined" ? document.currentScript : null;
 function _interopNamespaceDefault(e) {
   const n = Object.create(null, { [Symbol.toStringTag]: { value: "Module" } });
@@ -156,6 +157,32 @@ function clearGitHubAuth() {
     store.set("github", {});
   }
   console.log("clearGitHubAuth: GitHub auth state cleared");
+}
+function getWorkspaceConfig() {
+  return store.get("workspace", {});
+}
+function setClonedRepo(repoName, path2) {
+  const workspace = getWorkspaceConfig();
+  const clonedRepos = workspace.clonedRepos || {};
+  clonedRepos[repoName] = {
+    path: path2,
+    lastUpdated: Date.now()
+  };
+  store.set("workspace", {
+    ...workspace,
+    clonedRepos
+  });
+}
+function getClonedRepos() {
+  const workspace = getWorkspaceConfig();
+  return workspace.clonedRepos || {};
+}
+function setWorkspaceRepoBasePath(repoBasePath) {
+  const workspace = getWorkspaceConfig();
+  store.set("workspace", {
+    ...workspace,
+    repoBasePath
+  });
 }
 const CALLBACK_PORT = 4200;
 const CALLBACK_PATH = "/sso/index.html";
@@ -672,6 +699,21 @@ async function listOrgRepos(org) {
   return repos;
 }
 const TEACHUPBEAT_ORG = "TeachUpbeat";
+const AUTOMATIC_REPOS = [
+  { name: "upbeat-aws-infrastructure", url: "https://github.com/TeachUpbeat/upbeat-aws-infrastructure.git" },
+  { name: "upbeat-engagement-database", url: "https://github.com/TeachUpbeat/engagement-database.git" }
+];
+const SELECTABLE_REPOS = [
+  { name: "upbeat-admin-portal", url: "https://github.com/TeachUpbeat/administrator-portal.git" },
+  { name: "upbeat-district-administration", url: "https://github.com/TeachUpbeat/district-administrator.git" },
+  { name: "upbeat-reports", url: "https://github.com/TeachUpbeat/reports-2.0.git" },
+  { name: "upbeat-survey-administration", url: "https://github.com/TeachUpbeat/upbeat-survey-administration.git" },
+  { name: "upbeat-survey-editor", url: "https://github.com/TeachUpbeat/survey-administrator.git" },
+  { name: "upbeat-user-administration", url: "https://github.com/TeachUpbeat/user-administrator.git" },
+  { name: "upbeat-survey-legacy", url: "https://github.com/TeachUpbeat/survey.git" },
+  { name: "upbeat-pdf-generator", url: "https://github.com/TeachUpbeat/pdf-generator.git" },
+  { name: "upbeat-presentation-generator", url: "https://github.com/TeachUpbeat/google-presentations.git" }
+];
 async function loadRepositories() {
   const auth = getGitHubAuth();
   if (!(auth == null ? void 0 : auth.accessToken)) {
@@ -680,6 +722,51 @@ async function loadRepositories() {
   await ensureValidGitHubToken();
   const repos = await listOrgRepos(TEACHUPBEAT_ORG);
   return repos.filter((r) => !r.archived);
+}
+async function getRepoMetadata(repoName) {
+  try {
+    const repos = await loadRepositories();
+    const repo = repos.find((r) => {
+      const nameMatch = r.name.toLowerCase() === repoName.toLowerCase() || r.name.toLowerCase().replace(/-/g, "") === repoName.toLowerCase().replace(/-/g, "");
+      const fullNameMatch = r.full_name.toLowerCase().includes(repoName.toLowerCase());
+      return nameMatch || fullNameMatch;
+    });
+    return (repo == null ? void 0 : repo.description) || null;
+  } catch (error) {
+    return null;
+  }
+}
+function formatRepoContextWithPaths(checkedOutRepos, metadataOnlyRepos, isUnsure) {
+  const parts = [];
+  if (checkedOutRepos.length > 0) {
+    parts.push(`## Local Repository Workspace
+
+The following repositories have been checked out to your local filesystem on the \`develop\` branch:
+
+${checkedOutRepos.map((r) => {
+      const desc = r.description ? ` - ${r.description}` : "";
+      return `- **${r.name}**: \`${r.path}\`${desc}`;
+    }).join("\n")}
+
+**Infrastructure & Database repos are always available** for any features requiring:
+- AWS infrastructure changes (Lambda, CloudFormation, Cognito, etc.)
+- Database schema changes (MySQL stored procedures, migrations, etc.)
+
+You can read files directly from these paths to understand existing code structure.`);
+  }
+  if (isUnsure && metadataOnlyRepos.length > 0) {
+    parts.push(`## Repository Selection Guidance
+
+The user was unsure which repositories are needed for their request. Use the repository descriptions below and the GitHub API (if needed) to determine which repositories should be included in the spawnee plan:
+
+${metadataOnlyRepos.map((r) => {
+      const desc = r.description ? ` - ${r.description}` : "";
+      return `- **${r.name}** (${r.full_name})${desc}`;
+    }).join("\n")}
+
+Analyze the user's request and identify which repositories will need changes.`);
+  }
+  return parts.join("\n\n");
 }
 function formatRepoContext(repos) {
   if (repos.length === 0) {
@@ -703,7 +790,7 @@ Note: You can reference these repositories in your responses, but you cannot pus
 }
 let claudeProcess = null;
 let currentSessionId = null;
-async function startClaudeSession(mainWindow2, prompt, workingDirectory) {
+async function startClaudeSession(mainWindow2, prompt, workingDirectory, workspaceConfig) {
   var _a, _b;
   if (claudeProcess) {
     stopClaudeSession();
@@ -733,12 +820,35 @@ async function startClaudeSession(mainWindow2, prompt, workingDirectory) {
   } catch (error) {
     logger.warn("Claude", "Failed to load repository descriptions", { error: error.message });
   }
-  try {
-    const repos = await loadRepositories();
-    repoContext = formatRepoContext(repos);
-    logger.info("Claude", "Loaded repositories", { count: repos.length });
-  } catch (error) {
-    logger.warn("Claude", "Failed to load repositories", { error: error.message });
+  if (workspaceConfig) {
+    const metadataRepos = workspaceConfig.metadataOnlyRepos.map((r) => ({
+      id: 0,
+      name: r.name,
+      full_name: `TeachUpbeat/${r.name}`,
+      description: r.description,
+      html_url: `https://github.com/TeachUpbeat/${r.name}`,
+      language: null,
+      default_branch: "develop",
+      archived: false
+    }));
+    repoContext = formatRepoContextWithPaths(
+      workspaceConfig.checkedOutRepos,
+      metadataRepos,
+      workspaceConfig.isUnsure
+    );
+    logger.info("Claude", "Using workspace config", {
+      checkedOut: workspaceConfig.checkedOutRepos.length,
+      metadataOnly: workspaceConfig.metadataOnlyRepos.length,
+      isUnsure: workspaceConfig.isUnsure
+    });
+  } else {
+    try {
+      const repos = await loadRepositories();
+      repoContext = formatRepoContext(repos);
+      logger.info("Claude", "Loaded repositories", { count: repos.length });
+    } catch (error) {
+      logger.warn("Claude", "Failed to load repositories", { error: error.message });
+    }
   }
   const systemPromptParts = [];
   systemPromptParts.push(`# You are a Spawnee Expert
@@ -970,6 +1080,110 @@ function clearClaudeSession() {
   logger.info("Claude", "Clearing session", { previousSessionId: currentSessionId });
   currentSessionId = null;
 }
+const execAsync = util.promisify(child_process.exec);
+const REPO_BASE_PATH = path__namespace.join(electron.app.getPath("userData"), "repos");
+const DEFAULT_BRANCH = "develop";
+if (!getWorkspaceConfig().repoBasePath) {
+  setWorkspaceRepoBasePath(REPO_BASE_PATH);
+}
+function isRepoCloned(repoName) {
+  const clonedRepos = getClonedRepos();
+  if (!clonedRepos[repoName]) return false;
+  const repoPath = clonedRepos[repoName].path;
+  return fs__namespace.existsSync(repoPath) && fs__namespace.existsSync(path__namespace.join(repoPath, ".git"));
+}
+function getRepoPath(repoName) {
+  const clonedRepos = getClonedRepos();
+  if (clonedRepos[repoName]) {
+    return clonedRepos[repoName].path;
+  }
+  return path__namespace.join(REPO_BASE_PATH, repoName);
+}
+async function ensureRepo(repoUrl, repoName) {
+  const localPath = getRepoPath(repoName);
+  const isCloned = isRepoCloned(repoName);
+  try {
+    if (!fs__namespace.existsSync(REPO_BASE_PATH)) {
+      fs__namespace.mkdirSync(REPO_BASE_PATH, { recursive: true });
+      logger.info("GitOps", "Created repo base directory", { path: REPO_BASE_PATH });
+    }
+    if (isCloned) {
+      logger.info("GitOps", "Updating existing repo", { repoName, localPath });
+      try {
+        await execAsync("git fetch origin", { cwd: localPath });
+        await execAsync("git checkout develop", { cwd: localPath });
+        await execAsync("git reset --hard origin/develop", { cwd: localPath });
+        logger.info("GitOps", "Repo updated successfully", { repoName });
+        setClonedRepo(repoName, localPath);
+        return {
+          success: true,
+          repoName,
+          localPath
+        };
+      } catch (error) {
+        const errorMessage = error.message;
+        if (errorMessage.includes("fatal:") && errorMessage.includes("develop")) {
+          logger.warn("GitOps", "Develop branch not found, trying default branch", { repoName });
+          const { stdout: defaultBranch } = await execAsync('git symbolic-ref refs/remotes/origin/HEAD | sed "s@^refs/remotes/origin/@@"', { cwd: localPath });
+          const branchName = defaultBranch.trim() || "main";
+          await execAsync(`git checkout ${branchName}`, { cwd: localPath });
+          await execAsync(`git reset --hard origin/${branchName}`, { cwd: localPath });
+          logger.info("GitOps", "Repo updated with default branch", { repoName, branch: branchName });
+          setClonedRepo(repoName, localPath);
+          return {
+            success: true,
+            repoName,
+            localPath
+          };
+        }
+        throw error;
+      }
+    } else {
+      logger.info("GitOps", "Cloning new repo", { repoName, repoUrl, localPath });
+      try {
+        await execAsync(`git clone --branch ${DEFAULT_BRANCH} --single-branch ${repoUrl} "${localPath}"`, {
+          cwd: REPO_BASE_PATH
+        });
+        logger.info("GitOps", "Repo cloned successfully", { repoName });
+        setClonedRepo(repoName, localPath);
+        return {
+          success: true,
+          repoName,
+          localPath
+        };
+      } catch (error) {
+        const errorMessage = error.message;
+        if (errorMessage.includes("fatal:") && errorMessage.includes("develop")) {
+          logger.warn("GitOps", "Develop branch not found, cloning default branch", { repoName });
+          await execAsync(`git clone ${repoUrl} "${localPath}"`, {
+            cwd: REPO_BASE_PATH
+          });
+          try {
+            await execAsync("git checkout develop", { cwd: localPath });
+          } catch {
+          }
+          logger.info("GitOps", "Repo cloned with default branch", { repoName });
+          setClonedRepo(repoName, localPath);
+          return {
+            success: true,
+            repoName,
+            localPath
+          };
+        }
+        throw error;
+      }
+    }
+  } catch (error) {
+    const errorMessage = error.message;
+    logger.error("GitOps", "Failed to ensure repo", { repoName, error: errorMessage });
+    return {
+      success: false,
+      repoName,
+      localPath,
+      error: errorMessage
+    };
+  }
+}
 const __filename$1 = url.fileURLToPath(typeof document === "undefined" ? require("url").pathToFileURL(__filename).href : _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("main.js", document.baseURI).href);
 const __dirname$1 = path.dirname(__filename$1);
 let mainWindow = null;
@@ -1173,9 +1387,9 @@ electron.ipcMain.handle("settings:set", (_event, key, value) => {
   setSetting(key, value);
   return { success: true };
 });
-electron.ipcMain.handle("claude:start", (_event, prompt, workingDirectory) => {
+electron.ipcMain.handle("claude:start", (_event, prompt, workingDirectory, workspaceConfig) => {
   if (!mainWindow) throw new Error("No main window");
-  startClaudeSession(mainWindow, prompt, workingDirectory);
+  startClaudeSession(mainWindow, prompt, workingDirectory, workspaceConfig);
   return { success: true };
 });
 electron.ipcMain.handle("claude:stop", () => {
@@ -1188,6 +1402,144 @@ electron.ipcMain.handle("claude:is-active", () => {
 electron.ipcMain.handle("claude:clear-session", () => {
   clearClaudeSession();
   return { success: true };
+});
+electron.ipcMain.handle("workspace:get-selectable-repos", async () => {
+  try {
+    const reposWithDescriptions = await Promise.all(
+      SELECTABLE_REPOS.map(async (repo) => {
+        const description = await getRepoMetadata(repo.name);
+        return {
+          name: repo.name,
+          url: repo.url,
+          description: description || ""
+        };
+      })
+    );
+    return { success: true, repos: reposWithDescriptions };
+  } catch (error) {
+    return {
+      success: true,
+      repos: SELECTABLE_REPOS.map((repo) => ({
+        name: repo.name,
+        url: repo.url,
+        description: ""
+      }))
+    };
+  }
+});
+electron.ipcMain.handle("workspace:setup", async (event, selectedRepoNames, isUnsure) => {
+  if (!mainWindow) throw new Error("No main window");
+  try {
+    const reposToClone = [];
+    reposToClone.push(...AUTOMATIC_REPOS);
+    if (!isUnsure && selectedRepoNames.length > 0) {
+      const selectedRepos = SELECTABLE_REPOS.filter((repo) => selectedRepoNames.includes(repo.name));
+      reposToClone.push(...selectedRepos);
+    }
+    mainWindow.webContents.send("workspace:progress", {
+      total: reposToClone.length,
+      completed: 0,
+      current: "",
+      repos: reposToClone.map((repo) => ({
+        name: repo.name,
+        status: "pending"
+      }))
+    });
+    let completedCount = 0;
+    const results = [];
+    await Promise.all(
+      reposToClone.map(async (repo) => {
+        mainWindow == null ? void 0 : mainWindow.webContents.send("workspace:progress", {
+          total: reposToClone.length,
+          completed: completedCount,
+          current: repo.name,
+          repos: reposToClone.map((r) => {
+            var _a, _b;
+            return {
+              name: r.name,
+              status: ((_a = results.find((res) => res.repoName === r.name)) == null ? void 0 : _a.success) ? "done" : r.name === repo.name ? "cloning" : results.find((res) => res.repoName === r.name) ? "error" : "pending",
+              error: (_b = results.find((res) => res.repoName === r.name && !res.success)) == null ? void 0 : _b.error
+            };
+          })
+        });
+        const result = await ensureRepo(repo.url, repo.name);
+        results.push(result);
+        completedCount++;
+        mainWindow == null ? void 0 : mainWindow.webContents.send("workspace:progress", {
+          total: reposToClone.length,
+          completed: completedCount,
+          current: repo.name,
+          repos: reposToClone.map((r) => {
+            const res = results.find((res2) => res2.repoName === r.name);
+            return {
+              name: r.name,
+              status: (res == null ? void 0 : res.success) ? "done" : res ? "error" : "pending",
+              error: res == null ? void 0 : res.error
+            };
+          })
+        });
+        return result;
+      })
+    );
+    let metadataOnlyRepos = [];
+    if (isUnsure) {
+      try {
+        const allRepos = await loadRepositories();
+        const selectedRepos = SELECTABLE_REPOS.filter((repo) => selectedRepoNames.includes(repo.name));
+        metadataOnlyRepos = await Promise.all(
+          selectedRepos.map(async (repo) => {
+            const description = await getRepoMetadata(repo.name) || "";
+            return { name: repo.name, description };
+          })
+        );
+      } catch (error) {
+      }
+    }
+    const clonedRepos = getClonedRepos();
+    const checkedOutRepos = results.filter((r) => r.success).map((r) => {
+      var _a;
+      return {
+        name: r.repoName,
+        path: r.localPath,
+        description: (_a = metadataOnlyRepos.find((m) => m.name === r.repoName)) == null ? void 0 : _a.description
+      };
+    });
+    const workspaceConfig = {
+      checkedOutRepos,
+      metadataOnlyRepos: metadataOnlyRepos.map((r) => ({
+        name: r.name,
+        description: r.description
+      })),
+      isUnsure
+    };
+    mainWindow.webContents.send("workspace:progress", {
+      total: reposToClone.length,
+      completed: reposToClone.length,
+      current: "",
+      repos: reposToClone.map((repo) => {
+        const result = results.find((r) => r.repoName === repo.name);
+        return {
+          name: repo.name,
+          status: (result == null ? void 0 : result.success) ? "done" : "error",
+          error: result == null ? void 0 : result.error
+        };
+      })
+    });
+    return { success: true, config: workspaceConfig };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+electron.ipcMain.handle("workspace:get-status", async () => {
+  const clonedRepos = getClonedRepos();
+  return {
+    success: true,
+    clonedRepos: Object.entries(clonedRepos).map(([name, info]) => ({
+      name,
+      path: info.path,
+      lastUpdated: info.lastUpdated
+    }))
+  };
 });
 electron.app.on("before-quit", () => {
   stopAuthServer();

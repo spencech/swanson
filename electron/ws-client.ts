@@ -28,6 +28,7 @@ interface PendingRequest {
 let config: OpenClawClientConfig | null = null;
 let connectionState: ConnectionState = "disconnected";
 let ws: WebSocket | null = null;
+let pendingSocket: WebSocket | null = null; // tracks socket during async handshake
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempts = 0;
 let mainWindowRef: BrowserWindow | null = null;
@@ -263,7 +264,12 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 		return { success: false, error: "Invalid server URL" };
 	}
 
-	// Close existing connection if any
+	// Close existing connection if any (including mid-handshake sockets)
+	if (pendingSocket) {
+		pendingSocket.removeAllListeners();
+		pendingSocket.close();
+		pendingSocket = null;
+	}
 	if (ws) {
 		ws.removeAllListeners();
 		ws.close();
@@ -272,6 +278,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 
 	return new Promise((resolve) => {
 		const socket = new WebSocket(wsUrl);
+		pendingSocket = socket;
 
 		let connected = false;
 		let connectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -314,6 +321,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 				if (connectTimeout) clearTimeout(connectTimeout);
 				socket.close();
 				ws = null;
+				pendingSocket = null;
 				connectionState = "disconnected";
 				const errMsg = JSON.stringify((msg as Record<string, unknown>).error || "Authentication failed");
 				resolve({ success: false, error: errMsg });
@@ -324,6 +332,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 
 		socket.on("open", () => {
 			ws = socket;
+			pendingSocket = null;
 			// Challenge will arrive as first message — handled by onFirstMessage
 		});
 
@@ -338,6 +347,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 		socket.on("error", (err) => {
 			if (!connected) {
 				if (connectTimeout) clearTimeout(connectTimeout);
+				pendingSocket = null;
 				connectionState = "disconnected";
 				resolve({ success: false, error: `WebSocket error: ${err.message}` });
 			} else {
@@ -350,6 +360,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 			if (!connected) {
 				socket.close();
 				ws = null;
+				pendingSocket = null;
 				connectionState = "disconnected";
 				resolve({ success: false, error: "Connection handshake timed out" });
 			}
@@ -358,6 +369,11 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 }
 
 export function disconnect(): void {
+	if (pendingSocket) {
+		pendingSocket.removeAllListeners();
+		pendingSocket.close();
+		pendingSocket = null;
+	}
 	if (ws) {
 		ws.removeAllListeners();
 		ws.close();

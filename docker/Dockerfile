@@ -19,7 +19,9 @@ FROM repos AS indexed
 ARG OPENAI_API_KEY
 RUN test -n "$OPENAI_API_KEY" || (echo "OPENAI_API_KEY build arg required for embeddings" && exit 1)
 
-RUN npm install -g chunkhound@latest
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    /root/.local/bin/uv tool install chunkhound
+ENV PATH="/root/.local/bin:/root/.local/share/uv/tools/chunkhound/bin:$PATH"
 
 COPY scripts/index-repos.sh /tmp/index-repos.sh
 RUN chmod +x /tmp/index-repos.sh && OPENAI_API_KEY=$OPENAI_API_KEY /tmp/index-repos.sh /repos
@@ -28,10 +30,15 @@ RUN chmod +x /tmp/index-repos.sh && OPENAI_API_KEY=$OPENAI_API_KEY /tmp/index-re
 FROM node:22-bookworm
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y git jq && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y git jq python3 python3-venv && rm -rf /var/lib/apt/lists/*
 
-# Install OpenClaw and ChunkHound globally
-RUN npm install -g openclaw@latest chunkhound@latest
+# Install OpenClaw via npm
+RUN npm install -g openclaw@latest
+
+# Install ChunkHound via uv (Python package)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    /root/.local/bin/uv tool install chunkhound
+ENV PATH="/root/.local/bin:/root/.local/share/uv/tools/chunkhound/bin:$PATH"
 
 # Create workspace directory structure
 RUN mkdir -p /workspace/{threads,plans,sessions,repos}

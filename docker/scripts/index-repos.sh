@@ -3,6 +3,9 @@ set -euo pipefail
 
 REPOS_DIR="${1:-/repos}"
 
+# ChunkHound v4 uses CHUNKHOUND_EMBEDDING_API_KEY (not OPENAI_API_KEY)
+export CHUNKHOUND_EMBEDDING_API_KEY="${CHUNKHOUND_EMBEDDING_API_KEY:-${OPENAI_API_KEY}}"
+
 echo "=== Indexing repos with ChunkHound ==="
 
 # Check that repos exist before iterating

@@ -112,6 +112,32 @@ function handleMessage(raw: WebSocket.Data): void {
 			} else {
 				pending.reject(new Error(JSON.stringify(msg.error || "Unknown error")));
 			}
+			return;
+		}
+
+		// Handle agent final response (not in pendingRequests since sendFrame was used)
+		if (msg.id === currentMessageId && msg.ok) {
+			const payload = msg.payload as Record<string, unknown>;
+			if (payload?.status === "ok" && chatRunning) {
+				const result = payload.result as Record<string, unknown> | undefined;
+				const payloads = result?.payloads as Array<Record<string, unknown>> | undefined;
+				if (payloads?.length) {
+					const text = payloads.map(p => (p.text as string) || "").join("\n");
+					if (text && !fullContent) {
+						// Streaming didn't deliver content — use final response as fallback
+						fullContent = text;
+					}
+				}
+				sendToRenderer("chat", {
+					content: fullContent,
+					delta: false,
+					done: true,
+					messageId: currentMessageId,
+				} as IChatPayload);
+				chatRunning = false;
+				currentMessageId = null;
+				fullContent = "";
+			}
 		}
 		return;
 	}
@@ -170,8 +196,9 @@ function handleConnectChallenge(payload: Record<string, unknown> | undefined): v
 
 function handleAgentEvent(payload: Record<string, unknown>): void {
 	const stream = payload.stream as string;
-	const delta = payload.delta as string | undefined;
-	const phase = payload.phase as string | undefined;
+	const data = payload.data as Record<string, unknown> | undefined;
+	const delta = data?.delta as string | undefined;
+	const phase = data?.phase as string | undefined;
 
 	// Lifecycle events
 	if (stream === "lifecycle") {
@@ -180,7 +207,8 @@ function handleAgentEvent(payload: Record<string, unknown>): void {
 			return;
 		}
 		if (phase === "end" || phase === "error") {
-			// Agent run finished
+			// Agent run finished — mark stream done
+			// (final res handler will also fire and deliver any content missed by streaming)
 			if (chatRunning && currentMessageId) {
 				sendToRenderer("chat", {
 					content: fullContent,
@@ -193,7 +221,7 @@ function handleAgentEvent(payload: Record<string, unknown>): void {
 				fullContent = "";
 			}
 			if (phase === "error") {
-				const errorMsg = payload.error as string || "Agent run failed";
+				const errorMsg = (data?.error as string) || "Agent run failed";
 				sendToRenderer("error", { code: "AGENT_ERROR", message: errorMsg });
 			}
 			return;

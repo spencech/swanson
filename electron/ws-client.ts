@@ -29,6 +29,7 @@ let config: OpenClawClientConfig | null = null;
 let connectionState: ConnectionState = "disconnected";
 let ws: WebSocket | null = null;
 let pendingSocket: WebSocket | null = null; // tracks socket during async handshake
+let connectTimeout: ReturnType<typeof setTimeout> | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempts = 0;
 let mainWindowRef: BrowserWindow | null = null;
@@ -268,6 +269,10 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 	// Must re-attach error handler after removeAllListeners — otherwise
 	// terminate/close can emit 'error' with no listener, which Node
 	// promotes to an uncaught exception.
+	if (connectTimeout) {
+		clearTimeout(connectTimeout);
+		connectTimeout = null;
+	}
 	if (pendingSocket) {
 		pendingSocket.removeAllListeners();
 		pendingSocket.on("error", () => {});
@@ -286,7 +291,6 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 		pendingSocket = socket;
 
 		let connected = false;
-		let connectTimeout: ReturnType<typeof setTimeout> | null = null;
 
 		// Wait for hello-ok response to confirm connection
 		const onFirstMessage = (raw: WebSocket.Data): void => {
@@ -310,7 +314,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 					connected = true;
 					connectionState = "connected";
 					reconnectAttempts = 0;
-					if (connectTimeout) clearTimeout(connectTimeout);
+					if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
 
 					// Switch to normal message handler
 					socket.removeListener("message", onFirstMessage);
@@ -323,7 +327,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 
 			// Auth failure
 			if (msg.type === "res" && msg.ok === false) {
-				if (connectTimeout) clearTimeout(connectTimeout);
+				if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
 				socket.close();
 				ws = null;
 				pendingSocket = null;
@@ -351,7 +355,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 
 		socket.on("error", (err) => {
 			if (!connected) {
-				if (connectTimeout) clearTimeout(connectTimeout);
+				if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
 				pendingSocket = null;
 				connectionState = "disconnected";
 				resolve({ success: false, error: `WebSocket error: ${err.message}` });
@@ -363,9 +367,12 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 		// Timeout if handshake doesn't complete
 		connectTimeout = setTimeout(() => {
 			if (!connected) {
+				socket.removeAllListeners();
+				socket.on("error", () => {});
 				socket.close();
 				ws = null;
 				pendingSocket = null;
+				connectTimeout = null;
 				connectionState = "disconnected";
 				resolve({ success: false, error: "Connection handshake timed out" });
 			}
@@ -374,6 +381,10 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 }
 
 export function disconnect(): void {
+	if (connectTimeout) {
+		clearTimeout(connectTimeout);
+		connectTimeout = null;
+	}
 	if (pendingSocket) {
 		pendingSocket.removeAllListeners();
 		pendingSocket.on("error", () => {});

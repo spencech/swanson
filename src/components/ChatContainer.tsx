@@ -24,14 +24,19 @@ export function ChatContainer() {
 			renameThread(activeThreadId, title)
 		}
 
-		// Prefix the first message with mode context for the agent
-		let messageContent = content
-		if (messages.length === 0 && activeThread?.mode) {
+		// Build the message sent to the agent (may include mode prefix + thread preamble)
+		// but display the user's original content in the chat bubble
+		const isFirstMessage = messages.length === 0
+		let agentMessage = content
+		if (isFirstMessage && activeThread?.mode) {
 			const modeLabel = activeThread.mode === "question" ? "QUESTION" : "WORK_ORDER"
-			messageContent = `[MODE: ${modeLabel}]\n${content}`
+			agentMessage = `[MODE: ${modeLabel}]\n\nThis is a new conversation thread. You have no prior context from other threads — do not reference previous conversations.\n\n${content}`
 		}
 
-		await sendMessage(messageContent)
+		await sendMessage(agentMessage, {
+			threadId: activeThreadId || undefined,
+			displayContent: isFirstMessage && agentMessage !== content ? content : undefined,
+		})
 	}
 
 	const handleEditRequest = useCallback(() => {

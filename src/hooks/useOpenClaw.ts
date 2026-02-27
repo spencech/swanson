@@ -148,9 +148,11 @@ export function useOpenClaw() {
     }
   }, [])
 
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessage = useCallback(async (content: string, options?: { threadId?: string; displayContent?: string }) => {
+    const displayText = options?.displayContent || content
+
     if (!window.electronAPI?.openclaw) {
-      addMessage({ role: 'user', content })
+      addMessage({ role: 'user', content: displayText })
       addMessage({
         role: 'assistant',
         content: 'OpenClaw API is not available. Check your server connection.',
@@ -158,11 +160,11 @@ export function useOpenClaw() {
       return
     }
 
-    addMessage({ role: 'user', content })
+    addMessage({ role: 'user', content: displayText })
     setProcessing(true)
 
     try {
-      await window.electronAPI.openclaw.send(content)
+      await window.electronAPI.openclaw.send(content, options?.threadId)
     } catch (error) {
       addMessage({
         role: 'assistant',

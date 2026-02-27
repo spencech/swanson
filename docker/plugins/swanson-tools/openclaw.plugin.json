@@ -1,0 +1,6 @@
+{
+  "id": "swanson-tools",
+  "name": "Swanson Planning Tools",
+  "description": "ChunkHound code search, plan validation, and spawnee YAML conversion for Swanson",
+  "version": "1.0.0"
+}

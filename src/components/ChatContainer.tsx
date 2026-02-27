@@ -1,30 +1,36 @@
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
-import { useClaudeCode } from '../hooks/useClaudeCode'
+import { useOpenClaw } from '../hooks/useOpenClaw'
 import { useChatStore } from '../stores/chatStore'
 
-interface WorkspaceConfig {
-  checkedOutRepos: Array<{ name: string; path: string; description?: string }>
-  metadataOnlyRepos: Array<{ name: string; description: string }>
-  isUnsure: boolean
-}
-
-interface ChatContainerProps {
-  workspaceConfig?: WorkspaceConfig | null
-}
-
-export function ChatContainer({ workspaceConfig }: ChatContainerProps) {
-  const { sendMessage, stopSession } = useClaudeCode()
+export function ChatContainer() {
+  const { sendMessage, stopSession, connectionState, connectionError } = useOpenClaw()
   const isProcessing = useChatStore((state) => state.isProcessing)
 
   const handleSend = async (content: string) => {
-    await sendMessage(content, workspaceConfig)
+    await sendMessage(content)
   }
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
+      {/* Connection status banner */}
+      {connectionState !== 'connected' && (
+        <div className={`px-4 py-2 text-sm text-center ${
+          connectionState === 'reconnecting'
+            ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300'
+            : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+        }`}>
+          {connectionState === 'reconnecting'
+            ? 'Reconnecting to server...'
+            : connectionError || 'Disconnected from server'}
+        </div>
+      )}
+
       <MessageList />
-      <ChatInput onSend={handleSend} />
+      <ChatInput
+        onSend={handleSend}
+        disabled={connectionState !== 'connected'}
+      />
 
       {/* Stop button when processing */}
       {isProcessing && (

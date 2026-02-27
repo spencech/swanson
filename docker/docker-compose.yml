@@ -1,0 +1,30 @@
+services:
+  swanson:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GITHUB_PAT: ${GITHUB_PAT}
+        OPENAI_API_KEY: ${OPENAI_API_KEY}
+    ports:
+      - "18789:18789"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-swanson-dev-token}
+    volumes:
+      - swanson-threads:/workspace/threads
+      - swanson-plans:/workspace/plans
+      - swanson-sessions:/workspace/sessions
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:18789/v1/models", "-H", "Authorization: Bearer ${OPENCLAW_GATEWAY_TOKEN:-swanson-dev-token}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  swanson-threads:
+  swanson-plans:
+  swanson-sessions:

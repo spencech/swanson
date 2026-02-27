@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useGitHub, GitHubUser } from './useGitHub'
 
 interface User {
   email: string
@@ -7,76 +6,44 @@ interface User {
 }
 
 interface AuthState {
-  isAuthenticated: boolean // Requires BOTH Google AND GitHub
-  isGoogleConnected: boolean
-  isGitHubConnected: boolean
+  isAuthenticated: boolean
   isLoading: boolean
   user: User | null
-  githubUser: GitHubUser | null
   error: string | null
 }
 
 export function useAuth() {
-  const github = useGitHub()
-  const [googleState, setGoogleState] = useState<{
-    isConnected: boolean
-    isLoading: boolean
-    user: User | null
-    error: string | null
-  }>({
-    isConnected: false,
+  const [state, setState] = useState<AuthState>({
+    isAuthenticated: false,
     isLoading: true,
     user: null,
     error: null,
   })
 
-  // Combined state
-  const state: AuthState = {
-    isAuthenticated: googleState.isConnected && github.isConnected,
-    isGoogleConnected: googleState.isConnected,
-    isGitHubConnected: github.isConnected,
-    isLoading: googleState.isLoading || github.isLoading,
-    user: googleState.user,
-    githubUser: github.user,
-    error: googleState.error || github.error,
-  }
-  
-  // Log auth state changes
-  useEffect(() => {
-    console.log('useAuth: State changed', {
-      isAuthenticated: state.isAuthenticated,
-      isGoogleConnected: state.isGoogleConnected,
-      isGitHubConnected: state.isGitHubConnected,
-      isLoading: state.isLoading,
-      hasUser: !!state.user,
-      hasGitHubUser: !!state.githubUser,
-    })
-  }, [state.isAuthenticated, state.isGoogleConnected, state.isGitHubConnected, state.isLoading, state.user, state.githubUser])
-
   // Check initial Google auth state
   useEffect(() => {
     const checkAuth = async () => {
       if (!window.electronAPI?.auth) {
-        setGoogleState({
-          isConnected: false,
+        setState({
+          isAuthenticated: false,
           isLoading: false,
           user: null,
-          error: 'Electron API not available. Preload script may have failed to load.',
+          error: 'Electron API not available.',
         })
         return
       }
 
       try {
         const authState = await window.electronAPI.auth.getState()
-        setGoogleState({
-          isConnected: authState.isAuthenticated,
+        setState({
+          isAuthenticated: authState.isAuthenticated,
           isLoading: false,
           user: authState.user || null,
           error: null,
         })
       } catch (error) {
-        setGoogleState({
-          isConnected: false,
+        setState({
+          isAuthenticated: false,
           isLoading: false,
           user: null,
           error: (error as Error).message,
@@ -86,11 +53,11 @@ export function useAuth() {
 
     checkAuth()
 
-    // Listen for Google auth success events
+    // Listen for auth success events
     if (window.electronAPI?.auth) {
       window.electronAPI.auth.onAuthSuccess((user) => {
-        setGoogleState({
-          isConnected: true,
+        setState({
+          isAuthenticated: true,
           isLoading: false,
           user,
           error: null,
@@ -101,34 +68,30 @@ export function useAuth() {
 
   const login = useCallback(async () => {
     if (!window.electronAPI?.auth) {
-      setGoogleState((prev) => ({
-        ...prev,
-        error: 'Electron API not available',
-      }))
+      setState((prev) => ({ ...prev, error: 'Electron API not available' }))
       return
     }
 
-    setGoogleState((prev) => ({ ...prev, isLoading: true, error: null }))
+    setState((prev) => ({ ...prev, isLoading: true, error: null }))
 
     try {
       const result = await window.electronAPI.auth.login()
-
       if (result.success) {
-        setGoogleState({
-          isConnected: true,
+        setState({
+          isAuthenticated: true,
           isLoading: false,
           user: result.user || null,
           error: null,
         })
       } else {
-        setGoogleState((prev) => ({
+        setState((prev) => ({
           ...prev,
           isLoading: false,
           error: result.error || 'Login failed',
         }))
       }
     } catch (error) {
-      setGoogleState((prev) => ({
+      setState((prev) => ({
         ...prev,
         isLoading: false,
         error: (error as Error).message,
@@ -140,35 +103,25 @@ export function useAuth() {
     if (window.electronAPI?.auth) {
       try {
         await window.electronAPI.auth.logout()
-      } catch (error) {
+      } catch {
         // Ignore errors
       }
     }
 
-    if (window.electronAPI?.github) {
-      try {
-        await window.electronAPI.github.logout()
-      } catch (error) {
-        // Ignore errors
-      }
-    }
-
-    // Reset Google state
-    setGoogleState({
-      isConnected: false,
+    setState({
+      isAuthenticated: false,
       isLoading: false,
       user: null,
       error: null,
     })
-    
-    // Reset GitHub state via the hook
-    github.disconnect()
-  }, [github])
+  }, [])
 
   return {
     ...state,
+    // Preserve these for backward compatibility during transition
+    isGoogleConnected: state.isAuthenticated,
+    isGitHubConnected: true,
     login,
     logout,
-    github,
   }
 }

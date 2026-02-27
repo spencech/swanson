@@ -17,47 +17,6 @@ interface AuthResult {
 interface Settings {
   theme: 'light' | 'dark'
   ssoUrl?: string
-  jiraEmail?: string
-  jiraApiToken?: string
-}
-
-interface ClaudeOutputChunk {
-  type: 'text' | 'error' | 'done' | 'start'
-  content?: string
-  error?: string
-}
-
-interface GitHubUser {
-  login: string
-  name: string
-  avatarUrl: string
-}
-
-interface GitHubState {
-  isConnected: boolean
-  user: GitHubUser | null
-}
-
-interface GitHubAuthResult {
-  success: boolean
-  pending?: boolean
-  userCode?: string
-  verificationUri?: string
-  user?: GitHubUser
-  error?: string
-  recommendedInterval?: number // Recommended polling interval in seconds (for slow_down)
-}
-
-interface GitHubReposResult {
-  success: boolean
-  repos?: Array<{
-    id: number
-    name: string
-    full_name: string
-    description: string | null
-    html_url: string
-  }>
-  error?: string
 }
 
 interface Window {
@@ -74,21 +33,16 @@ interface Window {
       get: (key?: string) => Promise<Settings | unknown>
       set: (key: string, value: unknown) => Promise<{ success: boolean }>
     }
-    claude: {
-      start: (prompt: string, workingDirectory?: string) => Promise<{ success: boolean }>
+    openclaw: {
+      connect: () => Promise<{ success: boolean; error?: string }>
+      send: (content: string, threadId?: string) => Promise<{ success: boolean }>
       stop: () => Promise<{ success: boolean }>
+      disconnect: () => Promise<{ success: boolean }>
+      status: () => Promise<{ state: string }>
       isActive: () => Promise<boolean>
-      clearSession: () => Promise<{ success: boolean }>
-      onOutput: (callback: (chunk: ClaudeOutputChunk) => void) => () => void
-    }
-    github: {
-      startAuth: () => Promise<GitHubAuthResult>
-      pollToken: () => Promise<GitHubAuthResult>
-      getState: () => Promise<GitHubState>
-      logout: () => Promise<{ success: boolean }>
-      listRepos: () => Promise<GitHubReposResult>
-      openVerificationUri: (uri: string) => Promise<{ success: boolean }>
-      onAuthSuccess: (callback: (user: GitHubUser) => void) => void
+      setServer: (url: string, token: string) => Promise<{ success: boolean }>
+      getServer: () => Promise<{ url: string; token: string }>
+      onMessage: (callback: (message: unknown) => void) => () => void
     }
   }
 }

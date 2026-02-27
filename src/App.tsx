@@ -4,28 +4,12 @@ import { useSettings } from './hooks/useSettings'
 import { LaunchScreen } from './components/LaunchScreen'
 import { ChatContainer } from './components/ChatContainer'
 
-interface WorkspaceConfig {
-  checkedOutRepos: Array<{ name: string; path: string; description?: string }>
-  metadataOnlyRepos: Array<{ name: string; description: string }>
-  isUnsure: boolean
-}
-
 function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [appVersion, setAppVersion] = useState<string>('')
-  const [workspaceReady, setWorkspaceReady] = useState(false)
-  const [workspaceConfig, setWorkspaceConfig] = useState<WorkspaceConfig | null>(null)
+  const [ready, setReady] = useState(false)
 
-  const {
-    isAuthenticated,
-    isLoading: authLoading,
-    user,
-    error: authError,
-    login,
-    logout,
-    isGoogleConnected,
-    isGitHubConnected,
-  } = useAuth()
+  const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth()
   const { settings, isLoading: settingsLoading, updateSetting } = useSettings()
 
   // Load theme from settings
@@ -33,7 +17,6 @@ function App() {
     if (settings?.theme) {
       setTheme(settings.theme)
     } else {
-      // Check system preference
       const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null
       if (savedTheme) {
         setTheme(savedTheme)
@@ -65,17 +48,6 @@ function App() {
   }
 
   const isLoading = authLoading || settingsLoading
-  
-  // Log app state
-  useEffect(() => {
-    console.log('App: Render state', {
-      isLoading,
-      isAuthenticated,
-      isGoogleConnected,
-      isGitHubConnected,
-      hasUser: !!user,
-    })
-  }, [isLoading, isAuthenticated, isGoogleConnected, isGitHubConnected, user])
 
   return (
     <div className="h-screen flex flex-col bg-light-bg dark:bg-dark-bg text-light-text-primary dark:text-dark-text-primary">
@@ -92,7 +64,6 @@ function App() {
         <div className="flex items-center gap-3">
           {isAuthenticated && user && (
             <div className="flex items-center gap-2 no-drag">
-              {/* User avatar */}
               <div className="w-7 h-7 rounded-full bg-light-accent dark:bg-dark-accent flex items-center justify-center text-white text-sm font-medium">
                 {(user.name || user.email).charAt(0).toUpperCase()}
               </div>
@@ -135,15 +106,10 @@ function App() {
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-light-accent dark:border-dark-accent border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : !workspaceReady ? (
-        <LaunchScreen
-          onWorkspaceReady={(config) => {
-            setWorkspaceConfig(config)
-            setWorkspaceReady(true)
-          }}
-        />
+      ) : !ready ? (
+        <LaunchScreen onReady={() => setReady(true)} />
       ) : (
-        <ChatContainer workspaceConfig={workspaceConfig} />
+        <ChatContainer />
       )}
     </div>
   )

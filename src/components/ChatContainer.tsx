@@ -30,7 +30,7 @@ export function ChatContainer() {
 		let agentMessage = content
 		if (isFirstMessage && activeThread?.mode) {
 			const modeLabel = activeThread.mode === "question" ? "QUESTION" : "WORK_ORDER"
-			agentMessage = `[MODE: ${modeLabel}]\n\nThis is a new conversation thread. You have no prior context from other threads — do not reference previous conversations.\n\n${content}`
+			agentMessage = `[MODE: ${modeLabel}]\n\nThis is a new conversation thread. The user cannot see messages from other threads — do not tell them to scroll up or reference anything you have shown them previously.\n\n${content}`
 		}
 
 		await sendMessage(agentMessage, {

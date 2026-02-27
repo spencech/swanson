@@ -2,7 +2,7 @@
 
 ## Code Search (ChunkHound)
 
-All 11 TeachUpbeat repositories are indexed locally with ChunkHound. Use these tools for code discovery:
+All 20 TeachUpbeat repositories are indexed locally with ChunkHound. Use these tools for code discovery:
 
 - **search_semantic**: Concept-based search. Use when you're unsure of exact keywords.
   - Example: `search_semantic("authentication middleware", repo="administrator-portal")`
@@ -25,6 +25,8 @@ All 11 TeachUpbeat repositories are indexed locally with ChunkHound. Use these t
 ## Repository Layout
 
 Repos are at `/workspace/repos/<repo-name>/`. ChunkHound indexes are per-repo in `.chunkhound/` directories.
+
+Per-repo AGENTS.md files (when present) are at `/workspace/repos/<repo-name>/AGENTS.md`. Read these for dense architectural context before planning steps that touch a given repo.
 
 ## Infrastructure
 

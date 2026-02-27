@@ -21,15 +21,24 @@
 	],
 	"repos": [
 		{ "name": "upbeat-aws-infrastructure", "path": "/workspace/repos/upbeat-aws-infrastructure" },
-		{ "name": "engagement-database", "path": "/workspace/repos/engagement-database" },
+		{ "name": "upbeat-cloudformation-json-stitcher", "path": "/workspace/repos/upbeat-cloudformation-json-stitcher" },
+		{ "name": "upbeat-lambda-layers", "path": "/workspace/repos/upbeat-lambda-layers" },
 		{ "name": "administrator-portal", "path": "/workspace/repos/administrator-portal" },
 		{ "name": "district-administrator", "path": "/workspace/repos/district-administrator" },
 		{ "name": "reports-2.0", "path": "/workspace/repos/reports-2.0" },
 		{ "name": "upbeat-survey-administration", "path": "/workspace/repos/upbeat-survey-administration" },
 		{ "name": "survey-administrator", "path": "/workspace/repos/survey-administrator" },
 		{ "name": "user-administrator", "path": "/workspace/repos/user-administrator" },
+		{ "name": "engagement-database", "path": "/workspace/repos/engagement-database" },
 		{ "name": "survey", "path": "/workspace/repos/survey" },
+		{ "name": "datapacks", "path": "/workspace/repos/datapacks" },
+		{ "name": "upbeat-sendgrid-cognito", "path": "/workspace/repos/upbeat-sendgrid-cognito" },
+		{ "name": "lambda-sendgrid", "path": "/workspace/repos/lambda-sendgrid" },
+		{ "name": "upbeat-sendgrid-webhook", "path": "/workspace/repos/upbeat-sendgrid-webhook" },
+		{ "name": "upbeat-sendgrid-websocket", "path": "/workspace/repos/upbeat-sendgrid-websocket" },
 		{ "name": "pdf-generator", "path": "/workspace/repos/pdf-generator" },
-		{ "name": "google-presentations", "path": "/workspace/repos/google-presentations" }
+		{ "name": "google-presentations", "path": "/workspace/repos/google-presentations" },
+		{ "name": "spawnee", "path": "/workspace/repos/spawnee" },
+		{ "name": "upbeat-documentation", "path": "/workspace/repos/upbeat-documentation" }
 	]
 }

@@ -3,22 +3,37 @@ set -euo pipefail
 
 REPOS_DIR="${1:-/repos}"
 
-# All 11 TeachUpbeat repositories
+# All 20 TeachUpbeat repositories
 REPOS=(
+  # Infrastructure & DevOps
   "upbeat-aws-infrastructure"
-  "engagement-database"
+  "upbeat-cloudformation-json-stitcher"
+  "upbeat-lambda-layers"
+  # Web Applications
   "administrator-portal"
   "district-administrator"
   "reports-2.0"
   "upbeat-survey-administration"
   "survey-administrator"
   "user-administrator"
+  # Backend Services
+  "engagement-database"
   "survey"
+  "datapacks"
+  # Email & Notifications
+  "upbeat-sendgrid-cognito"
+  "lambda-sendgrid"
+  "upbeat-sendgrid-webhook"
+  "upbeat-sendgrid-websocket"
+  # Utilities
   "pdf-generator"
   "google-presentations"
+  # Tooling & Documentation
+  "spawnee"
+  "upbeat-documentation"
 )
 
-echo "=== Cloning ${#REPOS[@]} TeachUpbeat repositories ==="
+echo "=== Cloning ${#REPOS[@]} TeachUpbeat repositories (read-only) ==="
 
 for repo in "${REPOS[@]}"; do
   echo "--- Cloning $repo ---"

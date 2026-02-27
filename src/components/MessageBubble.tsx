@@ -51,9 +51,14 @@ export function MessageBubble({ message, onEditRequest }: MessageBubbleProps) {
 		return tryParsePlan(message.content)
 	}, [message.content, message.isStreaming, isUser])
 
-	// If a plan is detected and it's not already set as current, set it
+	// If a plan is detected and it's newer or different from the current, update it
 	const isPlanMessage = detectedPlan !== null
-	if (isPlanMessage && (!currentPlan || currentPlan.id !== detectedPlan.id)) {
+	const isNewerPlan = isPlanMessage && (
+		!currentPlan ||
+		currentPlan.id !== detectedPlan.id ||
+		JSON.stringify(currentPlan) !== JSON.stringify(detectedPlan)
+	)
+	if (isNewerPlan) {
 		// Schedule state update for next tick to avoid render-time set
 		Promise.resolve().then(() => setCurrentPlan(detectedPlan))
 	}

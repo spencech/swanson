@@ -7,7 +7,7 @@ services:
         GITHUB_PAT: ${GITHUB_PAT}
         OPENAI_API_KEY: ${OPENAI_API_KEY}
     ports:
-      - "18789:18789"
+      - "18790:18789"
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}

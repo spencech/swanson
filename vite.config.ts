@@ -18,7 +18,7 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron',
             rollupOptions: {
-              external: ['electron', 'electron-store']
+              external: ['electron', 'electron-store', 'ws', 'bufferutil', 'utf-8-validate']
             }
           }
         }

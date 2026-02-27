@@ -68,7 +68,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 							type="url"
 							value={serverUrl}
 							onChange={(e) => setServerUrl(e.target.value)}
-							placeholder="http://localhost:18789"
+							placeholder="http://localhost:18790"
 							className="w-full px-3 py-2 text-sm bg-light-surface dark:bg-dark-surface border border-light-border dark:border-dark-border rounded-lg text-light-text-primary dark:text-dark-text-primary placeholder-light-text-secondary dark:placeholder-dark-text-secondary focus:outline-none focus:border-light-accent dark:focus:border-dark-accent"
 						/>
 					</div>

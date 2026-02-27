@@ -31,7 +31,7 @@ const store = new Store<StoreSchema>({
       theme: 'light',
     },
     server: {
-      url: 'http://localhost:18789',
+      url: 'http://localhost:18790',
       token: 'swanson-dev-token',
     },
     threadsCache: [],
@@ -72,7 +72,7 @@ export function getSetting<K extends keyof StoreSchema['settings']>(
 
 // Server config functions
 export function getServerConfig(): StoreSchema['server'] {
-  return store.get('server', { url: 'http://localhost:18789', token: 'swanson-dev-token' })
+  return store.get('server', { url: 'http://localhost:18790', token: 'swanson-dev-token' })
 }
 
 export function setServerConfig(config: Partial<StoreSchema['server']>): void {

@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
 import DOMPurify from 'dompurify'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Message } from '../stores/chatStore'
 import { usePlanStore } from '../stores/planStore'
 import { PlanCard } from './PlanCard'
@@ -137,12 +139,20 @@ export function MessageBubble({ message, onEditRequest }: MessageBubbleProps) {
 						: "bg-light-surface dark:bg-dark-surface text-light-text-primary dark:text-dark-text-primary rounded-bl-md"
 				}`}
 			>
-				<div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-					{message.content}
-					{message.isStreaming && (
-						<span className="inline-block w-2 h-4 ml-1 bg-current animate-pulse" />
-					)}
-				</div>
+				{isUser ? (
+					<div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+						{message.content}
+					</div>
+				) : (
+					<div className="prose-swanson text-sm text-light-text-primary dark:text-dark-text-primary">
+						<ReactMarkdown remarkPlugins={[remarkGfm]}>
+							{message.content}
+						</ReactMarkdown>
+						{message.isStreaming && (
+							<span className="inline-block w-2 h-4 ml-1 bg-current animate-pulse" />
+						)}
+					</div>
+				)}
 			</div>
 		</div>
 	)

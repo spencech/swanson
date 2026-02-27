@@ -29,10 +29,10 @@ export function Dashboard() {
 		<div className="flex-1 flex items-center justify-center">
 			<div className="text-center max-w-lg px-4">
 				<h2 className="text-2xl font-semibold text-light-text-primary dark:text-dark-text-primary mb-3">
-					What would you like to build?
+					How can Swanson help?
 				</h2>
 				<p className="text-light-text-secondary dark:text-dark-text-secondary mb-6">
-					Describe a feature or paste a JIRA ticket number to get started. I'll help you create a spawnee plan.
+					Ask a question about the codebase or start a work order to plan a feature.
 				</p>
 
 				<button

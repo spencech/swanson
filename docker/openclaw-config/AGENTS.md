@@ -27,6 +27,10 @@ Read it with: `cat /workspace/repos/<slug>/AGENTS.md`
 
 Not all repos will have one yet. If the file doesn't exist, fall back to ChunkHound search.
 
+## Repo Freshness
+
+All 20 repos are pulled automatically in the background each time the container starts. The refresh log is at `/workspace/refresh.log`. If a user asks whether repos are up to date, check `tail -20 /workspace/refresh.log` to show them the last refresh status.
+
 ## Repository Expert Behavior
 
 You have per-repo ChunkHound indexes for all 20 TeachUpbeat repositories. This means:

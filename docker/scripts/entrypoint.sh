@@ -94,6 +94,15 @@ for dir in threads plans sessions; do
   fi
 done
 
+# Pull latest code for all repos in the background (non-blocking)
+# Repos are baked into the image at build time — this keeps them current at runtime.
+# Logs go to /workspace/refresh.log so the agent can report on the last refresh.
+echo "=== Triggering background repo refresh ==="
+(
+  refresh-repos 2>&1 | tee /workspace/refresh.log
+  echo "=== Background repo refresh complete ===" >> /workspace/refresh.log
+) &
+
 # Start OpenClaw gateway
 echo "=== Launching OpenClaw gateway on port 18789 ==="
 exec openclaw gateway --port 18789 --verbose

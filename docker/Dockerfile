@@ -41,10 +41,22 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
 ENV PATH="/root/.local/bin:/root/.local/share/uv/tools/chunkhound/bin:$PATH"
 
 # Create workspace directory structure
-RUN mkdir -p /workspace/threads /workspace/plans /workspace/sessions /workspace/repos
+RUN mkdir -p /workspace/threads /workspace/plans /workspace/sessions /workspace/repos /workspace/knowledge
 
 # Copy cloned + indexed repos from build stages
 COPY --from=indexed /repos /workspace/repos
+
+# Copy per-repo AGENTS.md files (if they exist)
+COPY openclaw-config/repo-agents/ /tmp/repo-agents/
+RUN for f in /tmp/repo-agents/*.md; do \
+      repo_name=$(basename "$f" .md); \
+      if [ -d "/workspace/repos/${repo_name}" ]; then \
+        cp "$f" "/workspace/repos/${repo_name}/AGENTS.md"; \
+      fi; \
+    done && rm -rf /tmp/repo-agents
+
+# Make repos read-only (agent should never modify source code)
+RUN chmod -R a-w /workspace/repos
 
 # Copy OpenClaw workspace configuration
 COPY openclaw-config/AGENTS.md /workspace/AGENTS.md
@@ -76,6 +88,6 @@ RUN chmod +x /entrypoint.sh
 EXPOSE 18789
 
 # Volumes for persistent data
-VOLUME ["/workspace/threads", "/workspace/plans", "/workspace/sessions"]
+VOLUME ["/workspace/threads", "/workspace/plans", "/workspace/sessions", "/workspace/knowledge"]
 
 ENTRYPOINT ["/entrypoint.sh"]

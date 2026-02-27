@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { useThreads } from '../hooks/useThreads'
 import { useThreadStore } from '../stores/threadStore'
 import { SidebarThreadItem } from './SidebarThreadItem'
 import { SidebarPlanGroup } from './SidebarPlanGroup'
-import type { PlanStatus } from '../../shared/types'
+import { ThreadModeModal } from './ThreadModeModal'
+import type { PlanStatus, ThreadMode } from '../../shared/types'
 
 const PLAN_STATUS_ORDER: PlanStatus[] = ["draft", "refined", "approved", "exported"]
 
@@ -18,6 +20,12 @@ export function Sidebar() {
 	} = useThreads()
 	const sidebarCollapsed = useThreadStore((state) => state.sidebarCollapsed)
 	const toggleSidebar = useThreadStore((state) => state.toggleSidebar)
+	const [showModeModal, setShowModeModal] = useState(false)
+
+	const handleModeSelect = (mode: ThreadMode) => {
+		setShowModeModal(false)
+		createThread(mode)
+	}
 
 	if (sidebarCollapsed) {
 		return (
@@ -32,7 +40,7 @@ export function Sidebar() {
 					</svg>
 				</button>
 				<button
-					onClick={createThread}
+					onClick={() => setShowModeModal(true)}
 					className="p-2 rounded-lg hover:bg-light-border dark:hover:bg-dark-border transition-colors"
 					title="New thread"
 				>
@@ -40,6 +48,13 @@ export function Sidebar() {
 						<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
 					</svg>
 				</button>
+
+				{showModeModal && (
+					<ThreadModeModal
+						onSelect={handleModeSelect}
+						onClose={() => setShowModeModal(false)}
+					/>
+				)}
 			</div>
 		)
 	}
@@ -58,7 +73,7 @@ export function Sidebar() {
 				</span>
 				<div className="flex items-center gap-1">
 					<button
-						onClick={createThread}
+						onClick={() => setShowModeModal(true)}
 						className="p-1.5 rounded-lg hover:bg-light-border dark:hover:bg-dark-border transition-colors"
 						title="New thread"
 					>
@@ -124,6 +139,13 @@ export function Sidebar() {
 					)}
 				</div>
 			</div>
+
+			{showModeModal && (
+				<ThreadModeModal
+					onSelect={handleModeSelect}
+					onClose={() => setShowModeModal(false)}
+				/>
+			)}
 		</div>
 	)
 }

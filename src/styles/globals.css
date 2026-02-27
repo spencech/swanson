@@ -62,3 +62,106 @@
 .dark *:focus-visible {
   outline-color: #f59e0b;
 }
+
+/* Prose styles for structured HTML responses (question mode) */
+.prose-swanson h1, .prose-swanson h2, .prose-swanson h3, .prose-swanson h4 {
+  font-weight: 600;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+}
+.prose-swanson h1 { font-size: 1.25em; }
+.prose-swanson h2 { font-size: 1.125em; }
+.prose-swanson h3 { font-size: 1em; }
+.prose-swanson h4 { font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.05em; }
+.prose-swanson h1:first-child, .prose-swanson h2:first-child, .prose-swanson h3:first-child {
+  margin-top: 0;
+}
+
+.prose-swanson p {
+  margin: 0.75em 0;
+  line-height: 1.6;
+}
+
+.prose-swanson ul, .prose-swanson ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+.prose-swanson li {
+  margin: 0.25em 0;
+  line-height: 1.5;
+}
+
+.prose-swanson code {
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', monospace;
+  font-size: 0.85em;
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  background: #e5e7eb;
+}
+.dark .prose-swanson code {
+  background: #404040;
+}
+
+.prose-swanson pre {
+  margin: 0.75em 0;
+  padding: 0.75em 1em;
+  border-radius: 8px;
+  overflow-x: auto;
+  background: #f3f4f6;
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+.dark .prose-swanson pre {
+  background: #1a1a1a;
+}
+.prose-swanson pre code {
+  padding: 0;
+  background: none;
+}
+
+.prose-swanson table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+  font-size: 0.9em;
+}
+.prose-swanson th, .prose-swanson td {
+  padding: 0.5em 0.75em;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+.dark .prose-swanson th, .dark .prose-swanson td {
+  border-bottom-color: #404040;
+}
+.prose-swanson th {
+  font-weight: 600;
+}
+
+.prose-swanson blockquote {
+  margin: 0.75em 0;
+  padding-left: 1em;
+  border-left: 3px solid #d97706;
+  color: #6b7280;
+}
+.dark .prose-swanson blockquote {
+  border-left-color: #f59e0b;
+  color: #9ca3af;
+}
+
+.prose-swanson a {
+  color: #d97706;
+  text-decoration: underline;
+}
+.dark .prose-swanson a {
+  color: #f59e0b;
+}
+
+.prose-swanson hr {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+.dark .prose-swanson hr {
+  border-top-color: #404040;
+}

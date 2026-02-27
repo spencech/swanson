@@ -13,13 +13,25 @@ export function ChatContainer() {
 	const renameThread = useThreadStore((state) => state.renameThread)
 	const chatInputRef = useRef<HTMLTextAreaElement>(null)
 
+	// Get the active thread's mode for context
+	const threads = useThreadStore((state) => state.threads)
+	const activeThread = threads.find((t) => t.id === activeThreadId)
+
 	const handleSend = async (content: string) => {
 		// Auto-set thread title from first user message
 		if (activeThreadId && messages.length === 0) {
 			const title = content.length > 60 ? content.slice(0, 57) + "..." : content
 			renameThread(activeThreadId, title)
 		}
-		await sendMessage(content)
+
+		// Prefix the first message with mode context for the agent
+		let messageContent = content
+		if (messages.length === 0 && activeThread?.mode) {
+			const modeLabel = activeThread.mode === "question" ? "QUESTION" : "WORK_ORDER"
+			messageContent = `[MODE: ${modeLabel}]\n${content}`
+		}
+
+		await sendMessage(messageContent)
 	}
 
 	const handleEditRequest = useCallback(() => {

@@ -1,8 +1,23 @@
 import { useMemo } from 'react'
+import DOMPurify from 'dompurify'
 import { Message } from '../stores/chatStore'
 import { usePlanStore } from '../stores/planStore'
 import { PlanCard } from './PlanCard'
 import type { IPlan } from '../../shared/types'
+
+const ALLOWED_TAGS = [
+	"h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "span",
+	"table", "thead", "tbody", "tr", "th", "td",
+	"ul", "ol", "li", "dl", "dt", "dd",
+	"code", "pre", "blockquote",
+	"strong", "em", "a", "br", "hr",
+]
+
+function tryParseHtml(content: string): string | null {
+	const match = content.match(/<swanson-response>([\s\S]*?)<\/swanson-response>/)
+	if (!match) return null
+	return DOMPurify.sanitize(match[1], { ALLOWED_TAGS, ALLOWED_ATTR: ["href", "target", "class"] })
+}
 
 interface MessageBubbleProps {
 	message: Message
@@ -76,6 +91,12 @@ export function MessageBubble({ message, onEditRequest }: MessageBubbleProps) {
 		return null
 	}, [message.content, isPlanMessage])
 
+	// Check if this message contains structured HTML (from question mode)
+	const sanitizedHtml = useMemo(() => {
+		if (isUser || message.isStreaming) return null
+		return tryParseHtml(message.content)
+	}, [message.content, message.isStreaming, isUser])
+
 	if (isPlanMessage) {
 		return (
 			<div className="flex justify-start">
@@ -88,6 +109,20 @@ export function MessageBubble({ message, onEditRequest }: MessageBubbleProps) {
 						</div>
 					)}
 					<PlanCard onEditRequest={onEditRequest} />
+				</div>
+			</div>
+		)
+	}
+
+	// Render DOMPurify-sanitized HTML for structured question responses
+	if (sanitizedHtml) {
+		return (
+			<div className="flex justify-start">
+				<div className="max-w-[90%] bg-light-surface dark:bg-dark-surface px-5 py-4 rounded-2xl rounded-bl-md">
+					<div
+						className="prose-swanson text-sm text-light-text-primary dark:text-dark-text-primary"
+						dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+					/>
 				</div>
 			</div>
 		)

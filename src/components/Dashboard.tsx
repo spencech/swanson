@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { useThreads } from '../hooks/useThreads'
-import type { PlanStatus } from '../../shared/types'
+import { ThreadModeModal } from './ThreadModeModal'
+import type { PlanStatus, ThreadMode } from '../../shared/types'
 
 const STATUS_COLORS: Record<PlanStatus, string> = {
 	draft: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
@@ -10,6 +12,12 @@ const STATUS_COLORS: Record<PlanStatus, string> = {
 
 export function Dashboard() {
 	const { plans, createThread } = useThreads()
+	const [showModeModal, setShowModeModal] = useState(false)
+
+	const handleModeSelect = (mode: ThreadMode) => {
+		setShowModeModal(false)
+		createThread(mode)
+	}
 
 	const planCounts = {
 		draft: plans.filter((p) => p.status === "draft").length,
@@ -28,11 +36,18 @@ export function Dashboard() {
 				</p>
 
 				<button
-					onClick={createThread}
+					onClick={() => setShowModeModal(true)}
 					className="px-6 py-3 bg-light-accent dark:bg-dark-accent text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
 				>
 					New Thread
 				</button>
+
+				{showModeModal && (
+					<ThreadModeModal
+						onSelect={handleModeSelect}
+						onClose={() => setShowModeModal(false)}
+					/>
+				)}
 
 				{/* Plan summary cards */}
 				{plans.length > 0 && (

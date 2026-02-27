@@ -56,6 +56,27 @@ EOF
 
 echo "OpenClaw config written to ${OPENCLAW_HOME}/openclaw.json"
 
+# Initialize knowledge repo if not present
+if [ ! -f "/workspace/knowledge/KNOWLEDGE.md" ]; then
+  cat > /workspace/knowledge/KNOWLEDGE.md << 'KEOF'
+# Swanson Knowledge Base
+
+Persistent knowledge about the Upbeat ecosystem. Entries are added by users and the agent.
+Each entry includes a category, timestamp, and description.
+
+---
+
+KEOF
+  cd /workspace/knowledge
+  git init -q
+  git add -A
+  git commit -q -m "Initialize knowledge base"
+  cd /workspace
+  echo "Knowledge base initialized at /workspace/knowledge/"
+else
+  echo "Knowledge base found at /workspace/knowledge/"
+fi
+
 # Verify repos are present
 REPO_COUNT=$(ls -1d /workspace/repos/*/ 2>/dev/null | wc -l)
 echo "Repos available: ${REPO_COUNT}"

@@ -16,6 +16,7 @@ services:
       - swanson-threads:/workspace/threads
       - swanson-plans:/workspace/plans
       - swanson-sessions:/workspace/sessions
+      - swanson-knowledge:/workspace/knowledge
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:18789/v1/models", "-H", "Authorization: Bearer ${OPENCLAW_GATEWAY_TOKEN:-swanson-dev-token}"]
@@ -28,3 +29,4 @@ volumes:
   swanson-threads:
   swanson-plans:
   swanson-sessions:
+  swanson-knowledge:

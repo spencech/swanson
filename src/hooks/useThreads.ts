@@ -2,7 +2,7 @@ import { useEffect, useCallback } from 'react'
 import { useThreadStore } from '../stores/threadStore'
 import { useChatStore } from '../stores/chatStore'
 import { usePlanStore } from '../stores/planStore'
-import type { IThreadSummary } from '../../shared/types'
+import type { IThreadSummary, ThreadMode } from '../../shared/types'
 
 export function useThreads() {
 	const threads = useThreadStore((state) => state.threads)
@@ -21,10 +21,11 @@ export function useThreads() {
 		// For now, threads and plans are managed in memory
 	}, [])
 
-	const createThread = useCallback(() => {
+	const createThread = useCallback((mode: ThreadMode) => {
 		const newThread: IThreadSummary = {
 			id: crypto.randomUUID(),
-			title: "New Thread",
+			title: mode === "question" ? "New Question" : "New Work Order",
+			mode,
 			userEmail: "",
 			createdAt: new Date().toISOString(),
 			updatedAt: new Date().toISOString(),

@@ -1,8 +1,10 @@
 import { execFileSync } from "child_process";
-import { existsSync, readdirSync } from "fs";
+import { existsSync, readdirSync, appendFileSync } from "fs";
 import { join } from "path";
 
 const REPOS_DIR = "/workspace/repos";
+const KNOWLEDGE_DIR = "/workspace/knowledge";
+const KNOWLEDGE_FILE = join(KNOWLEDGE_DIR, "KNOWLEDGE.md");
 
 // ─── Helper: Run ChunkHound CLI in a repo directory ────────────────────────────
 
@@ -527,6 +529,80 @@ export default function (api: {
 						{
 							type: "text",
 							text: `Conversion error: ${error.message || "Unknown error"}`,
+						},
+					],
+				};
+			}
+		},
+	});
+
+	// save_knowledge: Persist durable knowledge to KNOWLEDGE.md
+	api.registerTool({
+		name: "save_knowledge",
+		description:
+			"Save a durable piece of knowledge about the Upbeat ecosystem to the persistent knowledge file. Use when a user teaches you a convention, pattern, correction, or architectural fact worth remembering across sessions. Do NOT save session-specific or transient information.",
+		parameters: {
+			type: "object",
+			properties: {
+				entry: {
+					type: "string",
+					description:
+						"The knowledge entry to persist (e.g., 'Every new route requires a CloudFormation update in upbeat-aws-infrastructure')",
+				},
+				category: {
+					type: "string",
+					enum: ["convention", "pattern", "correction", "architecture"],
+					description:
+						"Category of knowledge: convention (team/project rules), pattern (code patterns to follow), correction (fix a previous misunderstanding), architecture (system design facts)",
+				},
+			},
+			required: ["entry", "category"],
+		},
+		execute: async (_id, params) => {
+			const entry = params.entry as string;
+			const category = params.category as string;
+			const timestamp = new Date().toISOString().split("T")[0];
+
+			const line = `\n### [${category}] — ${timestamp}\n${entry}\n`;
+
+			try {
+				appendFileSync(KNOWLEDGE_FILE, line, "utf-8");
+
+				// Git commit the change
+				try {
+					execFileSync("git", ["add", "KNOWLEDGE.md"], {
+						cwd: KNOWLEDGE_DIR,
+						encoding: "utf-8",
+						timeout: 10000,
+					});
+					execFileSync(
+						"git",
+						["commit", "-m", `knowledge: add ${category} entry`],
+						{
+							cwd: KNOWLEDGE_DIR,
+							encoding: "utf-8",
+							timeout: 10000,
+						}
+					);
+				} catch {
+					// Git commit may fail if no changes or not a repo — that's ok
+				}
+
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Knowledge saved (${category}): ${entry.substring(0, 80)}${entry.length > 80 ? "..." : ""}`,
+						},
+					],
+				};
+			} catch (err: unknown) {
+				const error = err as { message?: string };
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Failed to save knowledge: ${error.message || "Unknown error"}`,
 						},
 					],
 				};

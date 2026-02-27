@@ -15,7 +15,8 @@ cat > "${OPENCLAW_HOME}/openclaw.json" << EOF
     "bind": "lan",
     "mode": "local",
     "controlUi": {
-      "dangerouslyAllowHostHeaderOriginFallback": true
+      "dangerouslyAllowHostHeaderOriginFallback": true,
+      "dangerouslyDisableDeviceAuth": true
     },
     "auth": {
       "mode": "token",

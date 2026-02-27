@@ -4,7 +4,7 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   // App info
   getAppVersion: () => electron.ipcRenderer.invoke("get-app-version"),
   platform: process.platform,
-  // Auth
+  // Auth (Google SSO)
   auth: {
     login: () => electron.ipcRenderer.invoke("auth:login"),
     logout: () => electron.ipcRenderer.invoke("auth:logout"),
@@ -18,39 +18,20 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
     get: (key) => electron.ipcRenderer.invoke("settings:get", key),
     set: (key, value) => electron.ipcRenderer.invoke("settings:set", key, value)
   },
-  // Claude Code
-  claude: {
-    start: (prompt, workingDirectory, workspaceConfig) => electron.ipcRenderer.invoke("claude:start", prompt, workingDirectory, workspaceConfig),
-    stop: () => electron.ipcRenderer.invoke("claude:stop"),
-    isActive: () => electron.ipcRenderer.invoke("claude:is-active"),
-    clearSession: () => electron.ipcRenderer.invoke("claude:clear-session"),
-    onOutput: (callback) => {
-      const handler = (_event, chunk) => callback(chunk);
-      electron.ipcRenderer.on("claude-output", handler);
-      return () => electron.ipcRenderer.removeListener("claude-output", handler);
-    }
-  },
-  // GitHub
-  github: {
-    startAuth: () => electron.ipcRenderer.invoke("github:start-auth"),
-    pollToken: () => electron.ipcRenderer.invoke("github:poll-token"),
-    getState: () => electron.ipcRenderer.invoke("github:get-state"),
-    logout: () => electron.ipcRenderer.invoke("github:logout"),
-    listRepos: () => electron.ipcRenderer.invoke("github:list-repos"),
-    openVerificationUri: (uri) => electron.ipcRenderer.invoke("github:open-verification-uri", uri),
-    onAuthSuccess: (callback) => {
-      electron.ipcRenderer.on("github-auth-success", (_event, data) => callback(data.user));
-    }
-  },
-  // Workspace
-  workspace: {
-    getSelectableRepos: () => electron.ipcRenderer.invoke("workspace:get-selectable-repos"),
-    setup: (selectedRepos, isUnsure) => electron.ipcRenderer.invoke("workspace:setup", selectedRepos, isUnsure),
-    getStatus: () => electron.ipcRenderer.invoke("workspace:get-status"),
-    onProgress: (callback) => {
-      const handler = (_event, progress) => callback(progress);
-      electron.ipcRenderer.on("workspace:progress", handler);
-      return () => electron.ipcRenderer.removeListener("workspace:progress", handler);
+  // OpenClaw
+  openclaw: {
+    connect: () => electron.ipcRenderer.invoke("openclaw:connect"),
+    send: (content, threadId) => electron.ipcRenderer.invoke("openclaw:send", content, threadId),
+    stop: () => electron.ipcRenderer.invoke("openclaw:stop"),
+    disconnect: () => electron.ipcRenderer.invoke("openclaw:disconnect"),
+    status: () => electron.ipcRenderer.invoke("openclaw:status"),
+    isActive: () => electron.ipcRenderer.invoke("openclaw:is-active"),
+    setServer: (url, token) => electron.ipcRenderer.invoke("openclaw:set-server", url, token),
+    getServer: () => electron.ipcRenderer.invoke("openclaw:get-server"),
+    onMessage: (callback) => {
+      const handler = (_event, message) => callback(message);
+      electron.ipcRenderer.on("openclaw-message", handler);
+      return () => electron.ipcRenderer.removeListener("openclaw-message", handler);
     }
   }
 });

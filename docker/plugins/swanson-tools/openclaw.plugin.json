@@ -2,5 +2,10 @@
   "id": "swanson-tools",
   "name": "Swanson Planning Tools",
   "description": "ChunkHound code search, plan validation, and spawnee YAML conversion for Swanson",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
 }

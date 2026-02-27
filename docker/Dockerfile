@@ -41,7 +41,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
 ENV PATH="/root/.local/bin:/root/.local/share/uv/tools/chunkhound/bin:$PATH"
 
 # Create workspace directory structure
-RUN mkdir -p /workspace/{threads,plans,sessions,repos}
+RUN mkdir -p /workspace/threads /workspace/plans /workspace/sessions /workspace/repos
 
 # Copy cloned + indexed repos from build stages
 COPY --from=indexed /repos /workspace/repos

@@ -13,6 +13,7 @@ cat > "${OPENCLAW_HOME}/openclaw.json" << EOF
   "gateway": {
     "port": 18789,
     "bind": "lan",
+    "mode": "local",
     "auth": {
       "mode": "token",
       "token": "${OPENCLAW_GATEWAY_TOKEN:-swanson-dev-token}"

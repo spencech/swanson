@@ -5,7 +5,17 @@ REPOS_DIR="${1:-/repos}"
 
 echo "=== Indexing repos with ChunkHound ==="
 
-for repo_dir in "${REPOS_DIR}"/*/; do
+# Check that repos exist before iterating
+shopt -s nullglob
+REPO_DIRS=("${REPOS_DIR}"/*/)
+shopt -u nullglob
+
+if [ ${#REPO_DIRS[@]} -eq 0 ]; then
+  echo "ERROR: No repos found in ${REPOS_DIR}. Clone step may have failed."
+  exit 1
+fi
+
+for repo_dir in "${REPO_DIRS[@]}"; do
   repo_name=$(basename "$repo_dir")
   echo "--- Indexing $repo_name ---"
 
@@ -35,7 +45,7 @@ CHEOF
   fi
 
   # Run indexing
-  if chunkhound index . 2>/dev/null; then
+  if chunkhound index . 2>&1; then
     echo "  Indexed $repo_name successfully"
   else
     echo "  WARNING: Failed to index $repo_name — skipping"

@@ -14,6 +14,9 @@ cat > "${OPENCLAW_HOME}/openclaw.json" << EOF
     "port": 18789,
     "bind": "lan",
     "mode": "local",
+    "controlUi": {
+      "dangerouslyAllowHostHeaderOriginFallback": true
+    },
     "auth": {
       "mode": "token",
       "token": "${OPENCLAW_GATEWAY_TOKEN:-swanson-dev-token}"

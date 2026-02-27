@@ -50,6 +50,13 @@ COPY plugins/swanson-tools/ /workspace/extensions/swanson-tools/
 # Copy repo catalog for agent context
 COPY openclaw-config/repos.md /workspace/repos.md
 
+# Copy ChunkHound multi-repo config
+COPY chunkhound-config.json /workspace/chunkhound-config.json
+
+# Copy repo refresh script (git pull + re-index)
+COPY scripts/refresh-repos.sh /usr/local/bin/refresh-repos
+RUN chmod +x /usr/local/bin/refresh-repos
+
 # Initialize persistence files
 RUN echo '{"threads":[]}' > /workspace/threads/index.json && \
     echo '{"plans":[]}' > /workspace/plans/index.json

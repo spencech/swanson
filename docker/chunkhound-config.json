@@ -1,0 +1,35 @@
+{
+	"description": "Swanson multi-repo ChunkHound configuration. Per-repo indexes allow independent updates and scoped queries.",
+	"embedding": {
+		"model": "text-embedding-3-small",
+		"dimensions": 512
+	},
+	"ignore": [
+		"node_modules",
+		".git",
+		"dist",
+		"dist-electron",
+		"release",
+		"coverage",
+		"*.min.js",
+		"*.map",
+		"package-lock.json",
+		".angular",
+		".nyc_output",
+		"tmp",
+		"temp"
+	],
+	"repos": [
+		{ "name": "upbeat-aws-infrastructure", "path": "/workspace/repos/upbeat-aws-infrastructure" },
+		{ "name": "engagement-database", "path": "/workspace/repos/engagement-database" },
+		{ "name": "administrator-portal", "path": "/workspace/repos/administrator-portal" },
+		{ "name": "district-administrator", "path": "/workspace/repos/district-administrator" },
+		{ "name": "reports-2.0", "path": "/workspace/repos/reports-2.0" },
+		{ "name": "upbeat-survey-administration", "path": "/workspace/repos/upbeat-survey-administration" },
+		{ "name": "survey-administrator", "path": "/workspace/repos/survey-administrator" },
+		{ "name": "user-administrator", "path": "/workspace/repos/user-administrator" },
+		{ "name": "survey", "path": "/workspace/repos/survey" },
+		{ "name": "pdf-generator", "path": "/workspace/repos/pdf-generator" },
+		{ "name": "google-presentations", "path": "/workspace/repos/google-presentations" }
+	]
+}

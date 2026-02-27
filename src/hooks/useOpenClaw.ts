@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
 import { useChatStore } from '../stores/chatStore'
-import type { IWSMessage, IChatPayload, IStatusPayload, IErrorPayload } from '../../shared/types'
+import { usePlanStore } from '../stores/planStore'
+import type { IWSMessage, IChatPayload, IStatusPayload, IErrorPayload, IPlanUpdatePayload, IPlanApprovedPayload, IPlanYamlPayload } from '../../shared/types'
 
 type ConnectionState = 'disconnected' | 'connected' | 'reconnecting'
 
@@ -9,6 +10,8 @@ export function useOpenClaw() {
   const updateMessage = useChatStore((state) => state.updateMessage)
   const completeMessage = useChatStore((state) => state.completeMessage)
   const setProcessing = useChatStore((state) => state.setProcessing)
+  const setCurrentPlan = usePlanStore((state) => state.setCurrentPlan)
+  const updatePlanStatus = usePlanStore((state) => state.updatePlanStatus)
 
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected')
   const [connectionError, setConnectionError] = useState<string | null>(null)
@@ -91,11 +94,37 @@ export function useOpenClaw() {
           setProcessing(false)
           break
         }
+
+        case 'plan:update': {
+          const payload = msg.payload as IPlanUpdatePayload
+          setCurrentPlan(payload.plan)
+          break
+        }
+
+        case 'plan:approved': {
+          const payload = msg.payload as IPlanApprovedPayload
+          updatePlanStatus(payload.status)
+          break
+        }
+
+        case 'plan:yaml': {
+          const payload = msg.payload as IPlanYamlPayload
+          const blob = new Blob([payload.yaml], { type: 'text/yaml' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = payload.filename
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          URL.revokeObjectURL(url)
+          break
+        }
       }
     })
 
     return cleanup
-  }, [addMessage, updateMessage, completeMessage, setProcessing])
+  }, [addMessage, updateMessage, completeMessage, setProcessing, setCurrentPlan, updatePlanStatus])
 
   // Connect to OpenClaw on mount
   useEffect(() => {

@@ -11,6 +11,12 @@ All 11 TeachUpbeat repositories are indexed locally with ChunkHound. Use these t
 - **code_research**: Multi-file architectural analysis. Use for cross-cutting questions.
   - Example: `code_research("How does the survey submission flow work end-to-end?")`
 
+## Repo Maintenance
+
+- **refresh_repos**: Pull latest code from repos and re-index. Use when the user mentions stale code or before planning against recently changed repos.
+  - Example: `refresh_repos(repo="administrator-portal")` — refresh only one repo
+  - Example: `refresh_repos()` — refresh all repos (slow)
+
 ## Plan Management
 
 - **validate_plan**: Validates plan JSON against the IPlan schema. Always call before sending a plan to the client.

@@ -380,6 +380,72 @@ export default function (api: {
 		},
 	});
 
+	// refresh_repos: Pull latest code and re-index
+	api.registerTool({
+		name: "refresh_repos",
+		description:
+			"Pull latest code from all TeachUpbeat repositories and re-index with ChunkHound. Use when the user mentions code is stale or before planning against recently changed repos.",
+		parameters: {
+			type: "object",
+			properties: {
+				repo: {
+					type: "string",
+					description:
+						"Optional: refresh only a specific repo by name. Omit to refresh all.",
+				},
+			},
+		},
+		execute: async (_id, params) => {
+			const targetRepo = params.repo as string | undefined;
+			const repoPaths = resolveRepoPath(targetRepo);
+
+			if (repoPaths.length === 0) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: targetRepo
+								? `Repository "${targetRepo}" not found. Available repos: ${readdirSync(REPOS_DIR).join(", ")}`
+								: "No repositories found.",
+						},
+					],
+				};
+			}
+
+			const results: string[] = [];
+			for (const repoPath of repoPaths) {
+				const repoName = repoPath.split("/").pop();
+				try {
+					// git pull
+					execFileSync("git", ["pull", "--ff-only"], {
+						cwd: repoPath,
+						encoding: "utf-8",
+						timeout: 30000,
+					});
+					// re-index
+					const indexResult = runChunkHound(["index", "."], repoPath);
+					results.push(
+						`${repoName}: refreshed and re-indexed${indexResult.startsWith("ChunkHound error") ? ` (index warning: ${indexResult})` : ""}`
+					);
+				} catch (err: unknown) {
+					const error = err as { message?: string };
+					results.push(
+						`${repoName}: refresh failed — ${error.message || "Unknown error"}`
+					);
+				}
+			}
+
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Repo refresh results:\n${results.map((r) => `- ${r}`).join("\n")}`,
+					},
+				],
+			};
+		},
+	});
+
 	// validate_plan: Validate plan JSON against schema
 	api.registerTool({
 		name: "validate_plan",

@@ -265,15 +265,19 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 	}
 
 	// Close existing connection if any (including mid-handshake sockets)
-	// ws lib throws on close/terminate if socket is in CONNECTING state
+	// Must re-attach error handler after removeAllListeners — otherwise
+	// terminate/close can emit 'error' with no listener, which Node
+	// promotes to an uncaught exception.
 	if (pendingSocket) {
 		pendingSocket.removeAllListeners();
-		try { pendingSocket.terminate(); } catch {}
+		pendingSocket.on("error", () => {});
+		pendingSocket.terminate();
 		pendingSocket = null;
 	}
 	if (ws) {
 		ws.removeAllListeners();
-		try { ws.close(); } catch {}
+		ws.on("error", () => {});
+		ws.close();
 		ws = null;
 	}
 
@@ -370,15 +374,16 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 }
 
 export function disconnect(): void {
-	// ws lib throws on close/terminate if socket is in CONNECTING state
 	if (pendingSocket) {
 		pendingSocket.removeAllListeners();
-		try { pendingSocket.terminate(); } catch {}
+		pendingSocket.on("error", () => {});
+		pendingSocket.terminate();
 		pendingSocket = null;
 	}
 	if (ws) {
 		ws.removeAllListeners();
-		try { ws.close(); } catch {}
+		ws.on("error", () => {});
+		ws.close();
 		ws = null;
 	}
 	if (reconnectTimer) {

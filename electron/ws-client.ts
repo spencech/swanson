@@ -265,6 +265,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 	}
 
 	// Close existing connection if any (including mid-handshake sockets)
+	// ws lib throws on close/terminate if socket is in CONNECTING state
 	if (pendingSocket) {
 		pendingSocket.removeAllListeners();
 		try { pendingSocket.terminate(); } catch {}
@@ -272,7 +273,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 	}
 	if (ws) {
 		ws.removeAllListeners();
-		ws.close();
+		try { ws.close(); } catch {}
 		ws = null;
 	}
 
@@ -369,6 +370,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 }
 
 export function disconnect(): void {
+	// ws lib throws on close/terminate if socket is in CONNECTING state
 	if (pendingSocket) {
 		pendingSocket.removeAllListeners();
 		try { pendingSocket.terminate(); } catch {}
@@ -376,7 +378,7 @@ export function disconnect(): void {
 	}
 	if (ws) {
 		ws.removeAllListeners();
-		ws.close();
+		try { ws.close(); } catch {}
 		ws = null;
 	}
 	if (reconnectTimer) {

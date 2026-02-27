@@ -267,7 +267,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 	// Close existing connection if any (including mid-handshake sockets)
 	if (pendingSocket) {
 		pendingSocket.removeAllListeners();
-		pendingSocket.close();
+		pendingSocket.terminate();
 		pendingSocket = null;
 	}
 	if (ws) {
@@ -371,7 +371,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 export function disconnect(): void {
 	if (pendingSocket) {
 		pendingSocket.removeAllListeners();
-		pendingSocket.close();
+		pendingSocket.terminate();
 		pendingSocket = null;
 	}
 	if (ws) {

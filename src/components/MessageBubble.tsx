@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import DOMPurify from 'dompurify'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -19,6 +19,36 @@ function tryParseHtml(content: string): string | null {
 	const match = content.match(/<swanson-response>([\s\S]*?)<\/swanson-response>/)
 	if (!match) return null
 	return DOMPurify.sanitize(match[1], { ALLOWED_TAGS, ALLOWED_ATTR: ["href", "target", "class"] })
+}
+
+function CopyButton({ text }: { text: string }) {
+	const [copied, setCopied] = useState(false)
+
+	const handleCopy = useCallback(() => {
+		navigator.clipboard.writeText(text).then(() => {
+			setCopied(true)
+			setTimeout(() => setCopied(false), 2000)
+		})
+	}, [text])
+
+	return (
+		<button
+			onClick={handleCopy}
+			className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 p-1.5 rounded-md bg-light-bg/80 dark:bg-dark-bg/80 hover:bg-light-border dark:hover:bg-dark-border text-light-text-secondary dark:text-dark-text-secondary"
+			title="Copy to clipboard"
+		>
+			{copied ? (
+				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+					<polyline points="20 6 9 17 4 12" />
+				</svg>
+			) : (
+				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+					<rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+					<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+				</svg>
+			)}
+		</button>
+	)
 }
 
 interface MessageBubbleProps {
@@ -120,7 +150,8 @@ export function MessageBubble({ message, onEditRequest }: MessageBubbleProps) {
 	if (sanitizedHtml) {
 		return (
 			<div className="flex justify-start">
-				<div className="max-w-[90%] bg-light-surface dark:bg-dark-surface px-5 py-4 rounded-2xl rounded-bl-md">
+				<div className="group relative max-w-[90%] bg-light-surface dark:bg-dark-surface px-5 py-4 rounded-2xl rounded-bl-md">
+					<CopyButton text={message.content} />
 					<div
 						className="prose-swanson text-sm text-light-text-primary dark:text-dark-text-primary"
 						dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
@@ -133,7 +164,7 @@ export function MessageBubble({ message, onEditRequest }: MessageBubbleProps) {
 	return (
 		<div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
 			<div
-				className={`max-w-[80%] px-4 py-3 rounded-2xl ${
+				className={`${isUser ? "max-w-[80%]" : "group relative max-w-[80%]"} px-4 py-3 rounded-2xl ${
 					isUser
 						? "bg-light-accent dark:bg-dark-accent text-white rounded-br-md"
 						: "bg-light-surface dark:bg-dark-surface text-light-text-primary dark:text-dark-text-primary rounded-bl-md"
@@ -144,14 +175,17 @@ export function MessageBubble({ message, onEditRequest }: MessageBubbleProps) {
 						{message.content}
 					</div>
 				) : (
-					<div className="prose-swanson text-sm text-light-text-primary dark:text-dark-text-primary">
-						<ReactMarkdown remarkPlugins={[remarkGfm]}>
-							{message.content}
-						</ReactMarkdown>
-						{message.isStreaming && (
-							<span className="inline-block w-2 h-4 ml-1 bg-current animate-pulse" />
-						)}
-					</div>
+					<>
+						<CopyButton text={message.content} />
+						<div className="prose-swanson text-sm text-light-text-primary dark:text-dark-text-primary">
+							<ReactMarkdown remarkPlugins={[remarkGfm]}>
+								{message.content}
+							</ReactMarkdown>
+							{message.isStreaming && (
+								<span className="inline-block w-2 h-4 ml-1 bg-current animate-pulse" />
+							)}
+						</div>
+					</>
 				)}
 			</div>
 		</div>

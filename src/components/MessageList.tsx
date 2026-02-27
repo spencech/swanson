@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useChatStore } from '../stores/chatStore'
+import { useThreadStore } from '../stores/threadStore'
 import { MessageBubble } from './MessageBubble'
 
 interface MessageListProps {
@@ -10,6 +11,11 @@ export function MessageList({ onEditRequest }: MessageListProps) {
 	const messages = useChatStore((state) => state.messages)
 	const isProcessing = useChatStore((state) => state.isProcessing)
 	const containerRef = useRef<HTMLDivElement>(null)
+
+	const activeThreadId = useThreadStore((state) => state.activeThreadId)
+	const threads = useThreadStore((state) => state.threads)
+	const activeThread = threads.find((t) => t.id === activeThreadId)
+	const isQuestion = activeThread?.mode === "question"
 
 	// Get the content of the last message for scroll tracking during streaming
 	const lastMessageContent = messages[messages.length - 1]?.content
@@ -27,10 +33,12 @@ export function MessageList({ onEditRequest }: MessageListProps) {
 			<div className="flex-1 flex items-center justify-center">
 				<div className="text-center max-w-md px-4">
 					<h2 className="text-2xl font-semibold text-light-text-primary dark:text-dark-text-primary mb-3">
-						What would you like to build?
+						{isQuestion ? "What do you want to know?" : "What would you like to build?"}
 					</h2>
 					<p className="text-light-text-secondary dark:text-dark-text-secondary">
-						Describe a feature or paste a JIRA ticket number to get started. I'll help you create a spawnee plan.
+						{isQuestion
+							? "Ask about architecture, conventions, code patterns, or anything in the codebase."
+							: "Describe a feature or paste a JIRA ticket number to get started."}
 					</p>
 				</div>
 			</div>

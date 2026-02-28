@@ -30,7 +30,7 @@ RUN chmod +x /tmp/index-repos.sh && OPENAI_API_KEY=$OPENAI_API_KEY /tmp/index-re
 FROM node:22-bookworm
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y git jq python3 python3-venv && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y git jq python3 python3-venv default-mysql-client && rm -rf /var/lib/apt/lists/*
 
 # Install OpenClaw via npm
 RUN npm install -g openclaw@latest
@@ -39,6 +39,10 @@ RUN npm install -g openclaw@latest
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     /root/.local/bin/uv tool install chunkhound
 ENV PATH="/root/.local/bin:/root/.local/share/uv/tools/chunkhound/bin:$PATH"
+
+# Install AWS CLI via pip in isolated venv
+RUN python3 -m venv /opt/awscli && /opt/awscli/bin/pip install awscli && \
+    ln -s /opt/awscli/bin/aws /usr/local/bin/aws
 
 # Create workspace directory structure
 RUN mkdir -p /workspace/threads /workspace/plans /workspace/sessions /workspace/repos /workspace/knowledge
@@ -75,6 +79,11 @@ COPY chunkhound-config.json /workspace/chunkhound-config.json
 # Copy repo refresh script (git pull + re-index)
 COPY scripts/refresh-repos.sh /usr/local/bin/refresh-repos
 RUN chmod +x /usr/local/bin/refresh-repos
+
+# Copy database query wrapper scripts
+COPY scripts/query-mysql.sh /usr/local/bin/query-mysql
+COPY scripts/query-athena.sh /usr/local/bin/query-athena
+RUN chmod +x /usr/local/bin/query-mysql /usr/local/bin/query-athena
 
 # Initialize persistence files
 RUN echo '{"threads":[]}' > /workspace/threads/index.json && \

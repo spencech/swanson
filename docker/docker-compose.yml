@@ -13,6 +13,16 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - CHUNKHOUND_EMBEDDING_API_KEY=${OPENAI_API_KEY}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-swanson-dev-token}
+      # MySQL (read-only RDS access)
+      - MYSQL_HOST=${MYSQL_HOST:-}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - MYSQL_USER=${MYSQL_USER:-}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-}
+      # Athena (analytics access)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
     volumes:
       - swanson-threads:/workspace/threads
       - swanson-plans:/workspace/plans

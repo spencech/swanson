@@ -41,6 +41,31 @@ The `swanson-db` repository is a curated knowledge base — no application code,
 
 When a user asks about research findings, customer contracts, CRM data, or database structure, search `swanson-db` before searching application code repos.
 
+## Live Database Access
+
+You have live read-only access to production databases via two CLI tools. Use these to answer questions about actual data, row counts, and trends.
+
+**Decision flow — always start with the cheapest/fastest option:**
+
+| Need | Tool | Why |
+|------|------|-----|
+| Table structure, column types, relationships | swanson-db knowledge base | Instant, free, always available |
+| Existing query patterns, SQL examples | swanson-db SQL compendium | 546 cataloged queries across 11 repos |
+| Actual data values, row counts, simple lookups | `query-mysql` | Fast, low overhead, direct RDS access |
+| Large aggregations, trends, cross-table analytics | `query-athena` | Scales to large scans, but costs per TB |
+
+**Workflow:**
+1. **Check swanson-db first** for schema and existing queries — don't re-invent SQL that's already cataloged
+2. **Use `query-mysql`** for simple lookups (counts, single-table queries, specific record lookups)
+3. **Use `query-athena`** for heavy analytics (aggregations across millions of rows, time-series trends, cross-table joins on large datasets)
+
+**Important notes:**
+- Both tools are read-only — no data modification is possible
+- MySQL queries timeout after 30s; Athena queries after 120s (configurable to 300s)
+- Default LIMIT is 100 rows; maximum is 1000
+- For Athena, table names contain hyphens and must be quoted: `"rds-users"`, `"rds-districts"`, etc.
+- Athena charges per TB scanned — always use `WHERE` clauses and `LIMIT` to minimize costs
+
 ## Repository Expert Behavior
 
 You have per-repo ChunkHound indexes for all 21 TeachUpbeat repositories. This means:

@@ -43,6 +43,68 @@ for repo in /workspace/repos/*/; do echo "=== $(basename $repo) ==="; cd "$repo"
 
 Always prefer the registered tools when available — fall back to CLI only when they are not in your tool set.
 
+## MySQL (Live Database Queries)
+
+Use `query-mysql` to run **read-only** queries against the MySQL production read replica.
+
+```bash
+query-mysql [--format table|csv] [--limit N] "SQL QUERY"
+```
+
+**Flags:**
+- `--format table` (default) — formatted table output
+- `--format csv` — comma-separated output
+- `--limit N` — max rows (default: 100, max: 1000)
+
+**Safety rails:**
+- Only `SELECT`, `SHOW`, `DESCRIBE`, `EXPLAIN`, and `WITH` (CTEs) are allowed
+- `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, multi-statement queries are blocked
+- LIMIT is auto-appended (100) if missing from SELECT queries
+- 30-second query timeout
+
+**Examples:**
+```bash
+query-mysql "SELECT COUNT(*) FROM users"
+query-mysql --format csv --limit 50 "SELECT id, name FROM districts"
+query-mysql "SHOW TABLES"
+query-mysql "DESCRIBE users"
+query-mysql "SELECT u.id, u.email FROM users u JOIN districts d ON u.district_id = d.id WHERE d.name = 'Springfield' LIMIT 10"
+```
+
+## Athena (Analytics Queries)
+
+Use `query-athena` to run **read-only** queries against the `analytics_production` Athena database.
+
+```bash
+query-athena [--format table|csv] [--limit N] [--timeout N] "SQL QUERY"
+```
+
+**Flags:**
+- `--format table` (default) — formatted table output
+- `--format csv` — comma-separated output
+- `--limit N` — max rows (default: 100, max: 1000)
+- `--timeout N` — query timeout in seconds (default: 120, max: 300)
+
+**Safety rails:**
+- Only `SELECT`, `SHOW`, `DESCRIBE`, and `WITH` (CTEs) are allowed
+- Dangerous operations are blocked
+- LIMIT is auto-appended (100) if missing from SELECT queries
+- On timeout, the running query is automatically cancelled
+
+**Tables** (quote with double quotes — names contain hyphens):
+- `"rds-users"`, `"rds-districts"`, `"rds-intervals"`
+- `"rds-events"`, `"rds-schools"`, `"rds-networks"`
+
+**Examples:**
+```bash
+query-athena 'SELECT * FROM "rds-users" LIMIT 5'
+query-athena --format csv 'SELECT COUNT(*) FROM "rds-districts"'
+query-athena --limit 500 'SELECT * FROM "rds-events" WHERE event_type = '\''survey_complete'\'''
+query-athena 'SHOW TABLES'
+```
+
+**Cost awareness:** Athena charges per TB scanned. The stats footer shows data scanned for each query. Prefer filtering with `WHERE` clauses and using `LIMIT` to reduce scan volume.
+
 ## Repository Layout
 
 Repos are at `/workspace/repos/<repo-name>/`. ChunkHound indexes are per-repo in `.chunkhound/` directories.

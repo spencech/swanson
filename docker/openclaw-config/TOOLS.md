@@ -23,6 +23,26 @@ All 20 TeachUpbeat repositories are indexed locally with ChunkHound. Use these t
 - **validate_plan**: Validates plan JSON against the IPlan schema. Always call before sending a plan to the client.
 - **convert_to_spawnee_yaml**: Converts an approved plan to a downloadable spawnee YAML template.
 
+## CLI Fallback
+
+If `search_semantic`, `search_regex`, or `code_research` are not available as callable tools, use the ChunkHound CLI directly via shell commands. The results are identical.
+
+```bash
+# Semantic search (single repo)
+cd /workspace/repos/<repo-name> && chunkhound search --semantic "authentication middleware"
+
+# Regex search (single repo)
+cd /workspace/repos/<repo-name> && chunkhound search --regex "class.*extends AbstractRoute"
+
+# Deep research (single repo)
+cd /workspace/repos/<repo-name> && chunkhound research "How does the survey submission flow work?"
+
+# Search across all repos
+for repo in /workspace/repos/*/; do echo "=== $(basename $repo) ==="; cd "$repo" && chunkhound search --semantic "your query" 2>/dev/null; done
+```
+
+Always prefer the registered tools when available — fall back to CLI only when they are not in your tool set.
+
 ## Repository Layout
 
 Repos are at `/workspace/repos/<repo-name>/`. ChunkHound indexes are per-repo in `.chunkhound/` directories.

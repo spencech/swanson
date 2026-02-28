@@ -1,4 +1,144 @@
-"use strict";const a=require("electron"),M=require("path"),W=require("url"),G=require("http"),E=require("crypto"),Y=require("electron-store"),B=require("ws");var I=typeof document<"u"?document.currentScript:null;const _=new Y({name:"swanson-config",encryptionKey:"swanson-secure-storage-key",defaults:{auth:{},settings:{theme:"light"},server:{url:"http://localhost:18790",token:"swanson-dev-token"},threadsCache:[],plansCache:[]}});function z(){return _.get("auth")}function Q(e){_.set("auth",e)}function X(){_.set("auth",{})}function Z(){return _.get("settings")}function ee(e,t){_.set(`settings.${e}`,t)}function te(e){return _.get(`settings.${e}`)}function O(){return _.get("server",{url:"http://localhost:18790",token:"swanson-dev-token"})}function ne(e){const t=O();_.set("server",{...t,...e})}const L=4200,se="/sso/index.html",oe="776631454856-nbpd33ph7gpeeve0p1m80ibi2s5bmlj7.apps.googleusercontent.com",re="https://dev.api.reports.teachupbeat.net/auth/google/callback";function ae(){const e=E.randomUUID().replace(/-/g,""),t=Buffer.from(JSON.stringify({nonce:e,redirect:`http://localhost:${L}`,timestamp:Date.now()})).toString("base64");return`https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({client_id:oe,redirect_uri:re,response_type:"code",scope:"email openid profile",access_type:"offline",prompt:"select_account",state:t}).toString()}`}let T=null;function $(e){var t;try{const n=e.split(".");if(n.length!==3)return null;let s=n[1].replace(/-/g,"+").replace(/_/g,"/");for(;s.length%4;)s+="=";const o=Buffer.from(s,"base64").toString("utf-8"),r=JSON.parse(o);let l=r.email||((t=r["cognito:username"])!=null&&t.includes("@")?r["cognito:username"]:null)||r.preferred_username;return l&&(l=l.replace(/^google_/,"")),{email:l,name:r.given_name&&r.family_name?`${r.given_name} ${r.family_name}`:r.given_name||r.nickname||r.name||null,sub:r.sub}}catch(n){return console.error("Failed to decode JWT:",n),null}}function ce(){return new Promise((e,t)=>{T&&T.close(),T=G.createServer((n,s)=>{const o=new W.URL(n.url||"",`http://localhost:${L}`);if(o.pathname===se||o.pathname==="/sso/"||o.pathname==="/"){const r=o.searchParams.get("id_token"),l=o.searchParams.get("access_token")||o.searchParams.get("token")||r,w=o.searchParams.get("refresh_token")||o.searchParams.get("refresh");let c=o.searchParams.get("email")||o.searchParams.get("user_email"),y=o.searchParams.get("name")||o.searchParams.get("user_name")||o.searchParams.get("display_name");if(!c){if(r){const p=$(r);p&&(c=p.email||null,y=y||p.name||null)}if(!c&&l&&l!==r){const p=$(l);p&&(c=p.email||null,y=y||p.name||null)}}if(l){const p={accessToken:l,refreshToken:w||void 0,user:c?{email:c,name:y||c}:void 0};Q({accessToken:p.accessToken,refreshToken:p.refreshToken,user:p.user}),s.writeHead(200,{"Content-Type":"text/html; charset=utf-8"}),s.end(`<!DOCTYPE html>
+"use strict";
+const electron = require("electron");
+const path = require("path");
+const url = require("url");
+const http = require("http");
+const crypto = require("crypto");
+const Store = require("electron-store");
+const WebSocket = require("ws");
+var _documentCurrentScript = typeof document !== "undefined" ? document.currentScript : null;
+const store = new Store({
+  name: "swanson-config",
+  encryptionKey: "swanson-secure-storage-key",
+  defaults: {
+    auth: {},
+    settings: {
+      theme: "light"
+    },
+    server: {
+      url: "http://localhost:18790",
+      token: "swanson-dev-token"
+    },
+    threadsCache: [],
+    plansCache: []
+  }
+});
+function getAuth() {
+  return store.get("auth");
+}
+function setAuth(auth) {
+  store.set("auth", auth);
+}
+function clearAuth() {
+  store.set("auth", {});
+}
+function getSettings() {
+  return store.get("settings");
+}
+function setSetting(key, value) {
+  store.set(`settings.${key}`, value);
+}
+function getSetting(key) {
+  return store.get(`settings.${key}`);
+}
+function getServerConfig() {
+  return store.get("server", { url: "http://localhost:18790", token: "swanson-dev-token" });
+}
+function setServerConfig(config2) {
+  const current = getServerConfig();
+  store.set("server", { ...current, ...config2 });
+}
+const CALLBACK_PORT = 4200;
+const CALLBACK_PATH = "/sso/index.html";
+const GOOGLE_CLIENT_ID = "776631454856-nbpd33ph7gpeeve0p1m80ibi2s5bmlj7.apps.googleusercontent.com";
+const GOOGLE_REDIRECT_URI = "https://dev.api.reports.teachupbeat.net/auth/google/callback";
+function generateSsoUrl() {
+  const nonce = crypto.randomUUID().replace(/-/g, "");
+  const state = Buffer.from(JSON.stringify({
+    nonce,
+    redirect: `http://localhost:${CALLBACK_PORT}`,
+    timestamp: Date.now()
+  })).toString("base64");
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: GOOGLE_REDIRECT_URI,
+    response_type: "code",
+    scope: "email openid profile",
+    access_type: "offline",
+    prompt: "select_account",
+    state
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+let authServer = null;
+function decodeJwtPayload(token) {
+  var _a;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    let payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (payload.length % 4) {
+      payload += "=";
+    }
+    const decoded = Buffer.from(payload, "base64").toString("utf-8");
+    const data = JSON.parse(decoded);
+    let rawEmail = data.email || (((_a = data["cognito:username"]) == null ? void 0 : _a.includes("@")) ? data["cognito:username"] : null) || data.preferred_username;
+    if (rawEmail) {
+      rawEmail = rawEmail.replace(/^google_/, "");
+    }
+    return {
+      email: rawEmail,
+      // For name, use full name (given_name + family_name) for header display
+      name: data.given_name && data.family_name ? `${data.given_name} ${data.family_name}` : data.given_name || data.nickname || data.name || null,
+      sub: data.sub
+    };
+  } catch (e) {
+    console.error("Failed to decode JWT:", e);
+    return null;
+  }
+}
+function startAuthServer() {
+  return new Promise((resolve, reject) => {
+    if (authServer) {
+      authServer.close();
+    }
+    authServer = http.createServer((req, res) => {
+      const url$1 = new url.URL(req.url || "", `http://localhost:${CALLBACK_PORT}`);
+      if (url$1.pathname === CALLBACK_PATH || url$1.pathname === "/sso/" || url$1.pathname === "/") {
+        const idToken = url$1.searchParams.get("id_token");
+        const accessToken = url$1.searchParams.get("access_token") || url$1.searchParams.get("token") || idToken;
+        const refreshToken = url$1.searchParams.get("refresh_token") || url$1.searchParams.get("refresh");
+        let email = url$1.searchParams.get("email") || url$1.searchParams.get("user_email");
+        let name = url$1.searchParams.get("name") || url$1.searchParams.get("user_name") || url$1.searchParams.get("display_name");
+        if (!email) {
+          if (idToken) {
+            const idTokenData = decodeJwtPayload(idToken);
+            if (idTokenData) {
+              email = idTokenData.email || null;
+              name = name || idTokenData.name || null;
+            }
+          }
+          if (!email && accessToken && accessToken !== idToken) {
+            const accessTokenData = decodeJwtPayload(accessToken);
+            if (accessTokenData) {
+              email = accessTokenData.email || null;
+              name = name || accessTokenData.name || null;
+            }
+          }
+        }
+        if (accessToken) {
+          const tokens = {
+            accessToken,
+            refreshToken: refreshToken || void 0,
+            user: email ? { email, name: name || email } : void 0
+          };
+          setAuth({
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            user: tokens.user
+          });
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(`<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -36,7 +176,12 @@ body {
 setTimeout(function() { window.close(); }, 2000);
 <\/script>
 </body>
-</html>`),U(),e(p)}else s.writeHead(200,{"Content-Type":"text/html; charset=utf-8"}),s.end(`<!DOCTYPE html>
+</html>`);
+          stopAuthServer();
+          resolve(tokens);
+        } else {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(`<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -53,5 +198,592 @@ if (window.location.hash) {
 }
 <\/script>
 </body>
-</html>`)}else s.writeHead(404),s.end("Not Found")}),T.on("error",n=>{n.code!=="EPIPE"&&t(n)}),T.listen(L,"127.0.0.1"),setTimeout(()=>{T&&(U(),t(new Error("Authentication timed out")))},5*60*1e3)})}function U(){T&&(T.close(),T=null)}async function ie(e){const t=ce(),n=ae();await a.shell.openExternal(n);const s=await t;return e.webContents.send("auth-success",s),s}function le(){X(),U()}function J(){const e=z();return{isAuthenticated:!!(e!=null&&e.accessToken),user:e==null?void 0:e.user}}let k=null,v="disconnected",d=null,u=null,i=null,A=null,R=0,C=null,S=!1,f=null,g="";const q=10,ue=1e3,P=new Map;let b="main";function de(){if(!k)return null;try{const e=new URL(k.serverUrl);return e.protocol=e.protocol==="https:"?"wss:":"ws:",e.pathname="/ws",e.toString()}catch{return null}}function N(e){d&&d.readyState===B.OPEN&&d.send(JSON.stringify(e))}function m(e,t){if(!C||C.isDestroyed())return;const n={type:e,sessionId:b,payload:t,timestamp:new Date().toISOString()};C.webContents.send("openclaw-message",n)}function fe(e){let t;try{t=JSON.parse(e.toString())}catch{return}const n=t.type;if(n==="res"&&typeof t.id=="string"){const s=P.get(t.id);if(s){clearTimeout(s.timer),P.delete(t.id),t.ok?s.resolve(t.payload):s.reject(new Error(JSON.stringify(t.error||"Unknown error")));return}if(t.id===f&&t.ok){const o=t.payload;if((o==null?void 0:o.status)==="ok"&&S){const r=o.result,l=r==null?void 0:r.payloads;if(l!=null&&l.length){const w=l.map(c=>c.text||"").join(`
-`);w&&!g&&(g=w)}m("chat",{content:g,delta:!1,done:!0,messageId:f}),S=!1,f=null,g=""}}return}if(n==="event"){const s=t.event,o=t.payload;if(s==="connect.challenge"){j();return}if(s==="agent"&&o){me(o);return}if(s==="session.start"||s==="session.end")return}}function j(e){k&&N({type:"req",id:E.randomUUID(),method:"connect",params:{minProtocol:3,maxProtocol:3,client:{id:"cli",version:"1.0.0",platform:process.platform,mode:"cli"},role:"operator",scopes:["operator.read","operator.write"],auth:{token:k.token}}})}function me(e){const t=e.stream,n=e.data,s=n==null?void 0:n.delta,o=n==null?void 0:n.phase;if(t==="lifecycle"){if(o==="start")return;if(o==="end"||o==="error"){if(S&&f&&(m("chat",{content:g,delta:!1,done:!0,messageId:f}),S=!1,f=null,g=""),o==="error"){const r=(n==null?void 0:n.error)||"Agent run failed";m("error",{code:"AGENT_ERROR",message:r})}return}}if(t==="assistant"&&s&&f){g+=s,m("chat",{content:s,delta:!0,done:!1,messageId:f});return}}function F(){S&&f&&m("chat",{content:g,delta:!1,done:!0,messageId:f}),S=!1,f=null,g=""}function pe(e,t,n){k={serverUrl:e,token:t,userEmail:n},b=`swanson-${n.replace(/[^a-zA-Z0-9]/g,"-")}`}async function V(){if(!k)return{success:!1,error:"Client not configured. Set server URL and token first."};const e=de();return e?(i&&(clearTimeout(i),i=null),u&&(u.removeAllListeners(),u.on("error",()=>{}),u.terminate(),u=null),d&&(d.removeAllListeners(),d.on("error",()=>{}),d.close(),d=null),new Promise(t=>{const n=new B(e);u=n;let s=!1,o=!1;const r=w=>{o||(o=!0,t(w))},l=w=>{let c;try{c=JSON.parse(w.toString())}catch{return}if(c.type==="event"&&c.event==="connect.challenge"){j(c.payload);return}if(c.type==="res"&&c.ok===!0){const y=c.payload;if((y==null?void 0:y.type)==="hello-ok"){s=!0,v="connected",R=0,i&&(clearTimeout(i),i=null),n.removeListener("message",l),n.on("message",fe),r({success:!0});return}}if(c.type==="res"&&c.ok===!1){i&&(clearTimeout(i),i=null),n.close(),d=null,u=null,v="disconnected";const y=JSON.stringify(c.error||"Authentication failed");r({success:!1,error:y})}};n.on("message",l),n.on("open",()=>{d=n,u=null}),n.on("close",()=>{s?(v="disconnected",m("status",{state:"disconnected",message:"Connection closed"}),F(),C&&D()):(i&&(clearTimeout(i),i=null),u=null,v="disconnected",r({success:!1,error:"Connection closed before handshake completed"}))}),n.on("error",w=>{s?m("error",{code:"WS_ERROR",message:w.message}):(i&&(clearTimeout(i),i=null),u=null,v="disconnected",r({success:!1,error:`WebSocket error: ${w.message}`}))}),i=setTimeout(()=>{s||(n.removeAllListeners(),n.on("error",()=>{}),n.close(),d=null,u=null,i=null,v="disconnected",r({success:!1,error:"Connection handshake timed out"}))},1e4)})):{success:!1,error:"Invalid server URL"}}function H(){F(),i&&(clearTimeout(i),i=null),u&&(u.removeAllListeners(),u.on("error",()=>{}),u.terminate(),u=null),d&&(d.removeAllListeners(),d.on("error",()=>{}),d.close(),d=null),A&&(clearTimeout(A),A=null),v="disconnected",R=0;for(const[e,t]of P)clearTimeout(t.timer),t.reject(new Error("Disconnected"));P.clear()}function he(){return v}function D(){if(R>=q){v="disconnected",m("status",{state:"disconnected",message:"Max reconnection attempts reached"});return}v="reconnecting";const e=Math.min(ue*Math.pow(2,R),3e4);R++,m("status",{state:"reconnecting",message:`Reconnecting in ${Math.round(e/1e3)}s (attempt ${R}/${q})`}),A=setTimeout(async()=>{(await V()).success?m("status",{state:"connected",message:"Reconnected"}):D()},e)}async function ge(e,t,n){if(C=e,!k||v!=="connected"){m("error",{code:"NOT_CONNECTED",message:"Not connected to OpenClaw server"});return}const s=E.randomUUID();f=s,g="",S=!0,m("chat",{content:"",delta:!1,done:!1,messageId:s});try{const o=E.randomUUID();N({type:"req",id:s,method:"agent",params:{sessionKey:n||b,message:t,idempotencyKey:o}})}catch(o){m("error",{code:"REQUEST_ERROR",message:o.message}),S=!1,f=null,g="",D()}}function we(){S&&(N({type:"req",id:E.randomUUID(),method:"agent.stop",params:{sessionKey:b}}),S=!1,f=null,g="")}function ye(){return S}const ve=W.fileURLToPath(typeof document>"u"?require("url").pathToFileURL(__filename).href:I&&I.tagName.toUpperCase()==="SCRIPT"&&I.src||new URL("main.js",document.baseURI).href),x=M.dirname(ve);let h=null;function K(){h=new a.BrowserWindow({width:1200,height:800,minWidth:800,minHeight:600,titleBarStyle:"hiddenInset",trafficLightPosition:{x:15,y:15},webPreferences:{preload:M.join(x,"preload.js"),contextIsolation:!0,nodeIntegration:!1}}),process.env.VITE_DEV_SERVER_URL?(h.loadURL(process.env.VITE_DEV_SERVER_URL),h.webContents.openDevTools()):h.loadFile(M.join(x,"../dist/index.html")),h.on("closed",()=>{h=null})}a.app.whenReady().then(K);a.app.on("window-all-closed",()=>{process.platform!=="darwin"&&a.app.quit()});a.app.on("activate",()=>{a.BrowserWindow.getAllWindows().length===0&&K()});a.ipcMain.handle("get-app-version",()=>a.app.getVersion());a.ipcMain.handle("auth:login",async()=>{if(!h)throw new Error("No main window");try{return{success:!0,user:(await ie(h)).user}}catch(e){return{success:!1,error:e.message}}});a.ipcMain.handle("auth:logout",()=>(le(),{success:!0}));a.ipcMain.handle("auth:get-state",()=>J());a.ipcMain.handle("settings:get",(e,t)=>t?te(t):Z());a.ipcMain.handle("settings:set",(e,t,n)=>(ee(t,n),{success:!0}));a.ipcMain.handle("openclaw:connect",async()=>{var o;const e=O(),t=J(),n=((o=t==null?void 0:t.user)==null?void 0:o.email)||"unknown";pe(e.url,e.token,n);const s=await V();return s.success&&h&&h.webContents.send("openclaw-message",{type:"status",sessionId:"",payload:{state:"connected",message:"Connected to OpenClaw server"},timestamp:new Date().toISOString()}),s});a.ipcMain.handle("openclaw:send",async(e,t,n)=>{if(!h)throw new Error("No main window");return await ge(h,t,n),{success:!0}});a.ipcMain.handle("openclaw:stop",()=>(we(),{success:!0}));a.ipcMain.handle("openclaw:disconnect",()=>(H(),{success:!0}));a.ipcMain.handle("openclaw:status",()=>({state:he()}));a.ipcMain.handle("openclaw:is-active",()=>ye());a.ipcMain.handle("openclaw:set-server",(e,t,n)=>(ne({url:t,token:n}),{success:!0}));a.ipcMain.handle("openclaw:get-server",()=>O());a.app.on("before-quit",()=>{U(),H()});
+</html>`);
+        }
+      } else {
+        res.writeHead(404);
+        res.end("Not Found");
+      }
+    });
+    authServer.on("error", (err) => {
+      if (err.code !== "EPIPE") {
+        reject(err);
+      }
+    });
+    authServer.listen(CALLBACK_PORT, "127.0.0.1");
+    setTimeout(() => {
+      if (authServer) {
+        stopAuthServer();
+        reject(new Error("Authentication timed out"));
+      }
+    }, 5 * 60 * 1e3);
+  });
+}
+function stopAuthServer() {
+  if (authServer) {
+    authServer.close();
+    authServer = null;
+  }
+}
+async function login(mainWindow2) {
+  const authPromise = startAuthServer();
+  const ssoUrl = generateSsoUrl();
+  await electron.shell.openExternal(ssoUrl);
+  const tokens = await authPromise;
+  mainWindow2.webContents.send("auth-success", tokens);
+  return tokens;
+}
+function logout() {
+  clearAuth();
+  stopAuthServer();
+}
+function getAuthState() {
+  const auth = getAuth();
+  return {
+    isAuthenticated: !!(auth == null ? void 0 : auth.accessToken),
+    user: auth == null ? void 0 : auth.user
+  };
+}
+let config = null;
+let connectionState = "disconnected";
+let ws = null;
+let pendingSocket = null;
+let connectTimeout = null;
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+let mainWindowRef = null;
+let chatRunning = false;
+let currentMessageId = null;
+let fullContent = "";
+const MAX_RECONNECT_ATTEMPTS = 10;
+const BASE_RECONNECT_DELAY_MS = 1e3;
+const pendingRequests = /* @__PURE__ */ new Map();
+let sessionKey = "main";
+function getWsUrl() {
+  if (!config) return null;
+  try {
+    const url2 = new URL(config.serverUrl);
+    url2.protocol = url2.protocol === "https:" ? "wss:" : "ws:";
+    url2.pathname = "/ws";
+    return url2.toString();
+  } catch {
+    return null;
+  }
+}
+function sendFrame(frame) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(frame));
+  }
+}
+function sendToRenderer(type, payload) {
+  if (!mainWindowRef || mainWindowRef.isDestroyed()) return;
+  const message = {
+    type,
+    sessionId: sessionKey,
+    payload,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  mainWindowRef.webContents.send("openclaw-message", message);
+}
+function handleMessage(raw) {
+  let msg;
+  try {
+    msg = JSON.parse(raw.toString());
+  } catch {
+    return;
+  }
+  const msgType = msg.type;
+  if (msgType === "res" && typeof msg.id === "string") {
+    const pending = pendingRequests.get(msg.id);
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingRequests.delete(msg.id);
+      if (msg.ok) {
+        pending.resolve(msg.payload);
+      } else {
+        pending.reject(new Error(JSON.stringify(msg.error || "Unknown error")));
+      }
+      return;
+    }
+    if (msg.id === currentMessageId && msg.ok) {
+      const payload = msg.payload;
+      if ((payload == null ? void 0 : payload.status) === "ok" && chatRunning) {
+        const result = payload.result;
+        const payloads = result == null ? void 0 : result.payloads;
+        if (payloads == null ? void 0 : payloads.length) {
+          const text = payloads.map((p) => p.text || "").join("\n");
+          if (text && !fullContent) {
+            fullContent = text;
+          }
+        }
+        sendToRenderer("chat", {
+          content: fullContent,
+          delta: false,
+          done: true,
+          messageId: currentMessageId
+        });
+        chatRunning = false;
+        currentMessageId = null;
+        fullContent = "";
+      }
+    }
+    return;
+  }
+  if (msgType === "event") {
+    const event = msg.event;
+    const payload = msg.payload;
+    if (event === "connect.challenge") {
+      handleConnectChallenge();
+      return;
+    }
+    if (event === "agent" && payload) {
+      handleAgentEvent(payload);
+      return;
+    }
+    if (event === "session.start" || event === "session.end") {
+      return;
+    }
+  }
+}
+function handleConnectChallenge(payload) {
+  if (!config) return;
+  sendFrame({
+    type: "req",
+    id: crypto.randomUUID(),
+    method: "connect",
+    params: {
+      minProtocol: 3,
+      maxProtocol: 3,
+      client: {
+        id: "cli",
+        version: "1.0.0",
+        platform: process.platform,
+        mode: "cli"
+      },
+      role: "operator",
+      scopes: ["operator.read", "operator.write"],
+      auth: {
+        token: config.token
+      }
+    }
+  });
+}
+function handleAgentEvent(payload) {
+  const stream = payload.stream;
+  const data = payload.data;
+  const delta = data == null ? void 0 : data.delta;
+  const phase = data == null ? void 0 : data.phase;
+  if (stream === "lifecycle") {
+    if (phase === "start") {
+      return;
+    }
+    if (phase === "end" || phase === "error") {
+      if (chatRunning && currentMessageId) {
+        sendToRenderer("chat", {
+          content: fullContent,
+          delta: false,
+          done: true,
+          messageId: currentMessageId
+        });
+        chatRunning = false;
+        currentMessageId = null;
+        fullContent = "";
+      }
+      if (phase === "error") {
+        const errorMsg = (data == null ? void 0 : data.error) || "Agent run failed";
+        sendToRenderer("error", { code: "AGENT_ERROR", message: errorMsg });
+      }
+      return;
+    }
+  }
+  if (stream === "assistant" && delta && currentMessageId) {
+    fullContent += delta;
+    sendToRenderer("chat", {
+      content: delta,
+      delta: true,
+      done: false,
+      messageId: currentMessageId
+    });
+    return;
+  }
+  if (stream === "tool") {
+    return;
+  }
+}
+function cleanUpStream() {
+  if (chatRunning && currentMessageId) {
+    sendToRenderer("chat", {
+      content: fullContent,
+      delta: false,
+      done: true,
+      messageId: currentMessageId
+    });
+  }
+  chatRunning = false;
+  currentMessageId = null;
+  fullContent = "";
+}
+function configure(serverUrl, token, userEmail) {
+  config = { serverUrl, token, userEmail };
+  sessionKey = `swanson-${userEmail.replace(/[^a-zA-Z0-9]/g, "-")}`;
+}
+async function connect() {
+  if (!config) {
+    return { success: false, error: "Client not configured. Set server URL and token first." };
+  }
+  const wsUrl = getWsUrl();
+  if (!wsUrl) {
+    return { success: false, error: "Invalid server URL" };
+  }
+  if (connectTimeout) {
+    clearTimeout(connectTimeout);
+    connectTimeout = null;
+  }
+  if (pendingSocket) {
+    pendingSocket.removeAllListeners();
+    pendingSocket.on("error", () => {
+    });
+    pendingSocket.terminate();
+    pendingSocket = null;
+  }
+  if (ws) {
+    ws.removeAllListeners();
+    ws.on("error", () => {
+    });
+    ws.close();
+    ws = null;
+  }
+  return new Promise((resolve) => {
+    const socket = new WebSocket(wsUrl);
+    pendingSocket = socket;
+    let connected = false;
+    let resolved = false;
+    const safeResolve = (result) => {
+      if (resolved) return;
+      resolved = true;
+      resolve(result);
+    };
+    const onFirstMessage = (raw) => {
+      let msg;
+      try {
+        msg = JSON.parse(raw.toString());
+      } catch {
+        return;
+      }
+      if (msg.type === "event" && msg.event === "connect.challenge") {
+        handleConnectChallenge(msg.payload);
+        return;
+      }
+      if (msg.type === "res" && msg.ok === true) {
+        const payload = msg.payload;
+        if ((payload == null ? void 0 : payload.type) === "hello-ok") {
+          connected = true;
+          connectionState = "connected";
+          reconnectAttempts = 0;
+          if (connectTimeout) {
+            clearTimeout(connectTimeout);
+            connectTimeout = null;
+          }
+          socket.removeListener("message", onFirstMessage);
+          socket.on("message", handleMessage);
+          safeResolve({ success: true });
+          return;
+        }
+      }
+      if (msg.type === "res" && msg.ok === false) {
+        if (connectTimeout) {
+          clearTimeout(connectTimeout);
+          connectTimeout = null;
+        }
+        socket.close();
+        ws = null;
+        pendingSocket = null;
+        connectionState = "disconnected";
+        const errMsg = JSON.stringify(msg.error || "Authentication failed");
+        safeResolve({ success: false, error: errMsg });
+      }
+    };
+    socket.on("message", onFirstMessage);
+    socket.on("open", () => {
+      ws = socket;
+      pendingSocket = null;
+    });
+    socket.on("close", () => {
+      if (connected) {
+        connectionState = "disconnected";
+        sendToRenderer("status", { state: "disconnected", message: "Connection closed" });
+        cleanUpStream();
+        if (mainWindowRef) scheduleReconnect();
+      } else {
+        if (connectTimeout) {
+          clearTimeout(connectTimeout);
+          connectTimeout = null;
+        }
+        pendingSocket = null;
+        connectionState = "disconnected";
+        safeResolve({ success: false, error: "Connection closed before handshake completed" });
+      }
+    });
+    socket.on("error", (err) => {
+      if (!connected) {
+        if (connectTimeout) {
+          clearTimeout(connectTimeout);
+          connectTimeout = null;
+        }
+        pendingSocket = null;
+        connectionState = "disconnected";
+        safeResolve({ success: false, error: `WebSocket error: ${err.message}` });
+      } else {
+        sendToRenderer("error", { code: "WS_ERROR", message: err.message });
+      }
+    });
+    connectTimeout = setTimeout(() => {
+      if (!connected) {
+        socket.removeAllListeners();
+        socket.on("error", () => {
+        });
+        socket.close();
+        ws = null;
+        pendingSocket = null;
+        connectTimeout = null;
+        connectionState = "disconnected";
+        safeResolve({ success: false, error: "Connection handshake timed out" });
+      }
+    }, 1e4);
+  });
+}
+function disconnect() {
+  cleanUpStream();
+  if (connectTimeout) {
+    clearTimeout(connectTimeout);
+    connectTimeout = null;
+  }
+  if (pendingSocket) {
+    pendingSocket.removeAllListeners();
+    pendingSocket.on("error", () => {
+    });
+    pendingSocket.terminate();
+    pendingSocket = null;
+  }
+  if (ws) {
+    ws.removeAllListeners();
+    ws.on("error", () => {
+    });
+    ws.close();
+    ws = null;
+  }
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  connectionState = "disconnected";
+  reconnectAttempts = 0;
+  for (const [id, pending] of pendingRequests) {
+    clearTimeout(pending.timer);
+    pending.reject(new Error("Disconnected"));
+  }
+  pendingRequests.clear();
+}
+function getConnectionState() {
+  return connectionState;
+}
+function scheduleReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    connectionState = "disconnected";
+    sendToRenderer("status", {
+      state: "disconnected",
+      message: "Max reconnection attempts reached"
+    });
+    return;
+  }
+  connectionState = "reconnecting";
+  const delay = Math.min(
+    BASE_RECONNECT_DELAY_MS * Math.pow(2, reconnectAttempts),
+    3e4
+  );
+  reconnectAttempts++;
+  sendToRenderer("status", {
+    state: "reconnecting",
+    message: `Reconnecting in ${Math.round(delay / 1e3)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`
+  });
+  reconnectTimer = setTimeout(async () => {
+    const result = await connect();
+    if (result.success) {
+      sendToRenderer("status", { state: "connected", message: "Reconnected" });
+    } else {
+      scheduleReconnect();
+    }
+  }, delay);
+}
+async function sendChat(mainWindow2, content, threadId) {
+  mainWindowRef = mainWindow2;
+  if (!config || connectionState !== "connected") {
+    sendToRenderer("error", {
+      code: "NOT_CONNECTED",
+      message: "Not connected to OpenClaw server"
+    });
+    return;
+  }
+  const messageId = crypto.randomUUID();
+  currentMessageId = messageId;
+  fullContent = "";
+  chatRunning = true;
+  sendToRenderer("chat", {
+    content: "",
+    delta: false,
+    done: false,
+    messageId
+  });
+  try {
+    const idempotencyKey = crypto.randomUUID();
+    sendFrame({
+      type: "req",
+      id: messageId,
+      method: "agent",
+      params: {
+        sessionKey: threadId || sessionKey,
+        message: content,
+        idempotencyKey
+      }
+    });
+  } catch (err) {
+    sendToRenderer("error", {
+      code: "REQUEST_ERROR",
+      message: err.message
+    });
+    chatRunning = false;
+    currentMessageId = null;
+    fullContent = "";
+    scheduleReconnect();
+  }
+}
+function stopChat() {
+  if (chatRunning) {
+    sendFrame({
+      type: "req",
+      id: crypto.randomUUID(),
+      method: "agent.stop",
+      params: { sessionKey }
+    });
+    chatRunning = false;
+    currentMessageId = null;
+    fullContent = "";
+  }
+}
+function isActive() {
+  return chatRunning;
+}
+const __filename$1 = url.fileURLToPath(typeof document === "undefined" ? require("url").pathToFileURL(__filename).href : _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("main.js", document.baseURI).href);
+const __dirname$1 = path.dirname(__filename$1);
+let mainWindow = null;
+function createWindow() {
+  mainWindow = new electron.BrowserWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 800,
+    minHeight: 600,
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 15, y: 15 },
+    webPreferences: {
+      preload: path.join(__dirname$1, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  if (process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+    mainWindow.webContents.openDevTools();
+  } else {
+    mainWindow.loadFile(path.join(__dirname$1, "../dist/index.html"));
+  }
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+}
+electron.app.whenReady().then(createWindow);
+electron.app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    electron.app.quit();
+  }
+});
+electron.app.on("activate", () => {
+  if (electron.BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
+});
+electron.ipcMain.handle("get-app-version", () => {
+  return electron.app.getVersion();
+});
+electron.ipcMain.handle("auth:login", async () => {
+  if (!mainWindow) throw new Error("No main window");
+  try {
+    const tokens = await login(mainWindow);
+    return { success: true, user: tokens.user };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+electron.ipcMain.handle("auth:logout", () => {
+  logout();
+  return { success: true };
+});
+electron.ipcMain.handle("auth:get-state", () => {
+  return getAuthState();
+});
+electron.ipcMain.handle("settings:get", (_event, key) => {
+  if (key) {
+    return getSetting(key);
+  }
+  return getSettings();
+});
+electron.ipcMain.handle("settings:set", (_event, key, value) => {
+  setSetting(key, value);
+  return { success: true };
+});
+electron.ipcMain.handle("openclaw:connect", async () => {
+  var _a;
+  const serverConfig = getServerConfig();
+  const authState = getAuthState();
+  const userEmail = ((_a = authState == null ? void 0 : authState.user) == null ? void 0 : _a.email) || "unknown";
+  configure(serverConfig.url, serverConfig.token, userEmail);
+  const result = await connect();
+  if (result.success && mainWindow) {
+    mainWindow.webContents.send("openclaw-message", {
+      type: "status",
+      sessionId: "",
+      payload: { state: "connected", message: "Connected to OpenClaw server" },
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
+  return result;
+});
+electron.ipcMain.handle("openclaw:send", async (_event, content, threadId) => {
+  if (!mainWindow) throw new Error("No main window");
+  await sendChat(mainWindow, content, threadId);
+  return { success: true };
+});
+electron.ipcMain.handle("openclaw:stop", () => {
+  stopChat();
+  return { success: true };
+});
+electron.ipcMain.handle("openclaw:disconnect", () => {
+  disconnect();
+  return { success: true };
+});
+electron.ipcMain.handle("openclaw:status", () => {
+  return { state: getConnectionState() };
+});
+electron.ipcMain.handle("openclaw:is-active", () => {
+  return isActive();
+});
+electron.ipcMain.handle("openclaw:set-server", (_event, url2, token) => {
+  setServerConfig({ url: url2, token });
+  return { success: true };
+});
+electron.ipcMain.handle("openclaw:get-server", () => {
+  return getServerConfig();
+});
+electron.app.on("before-quit", () => {
+  stopAuthServer();
+  disconnect();
+});

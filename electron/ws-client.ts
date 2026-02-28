@@ -248,6 +248,22 @@ function handleAgentEvent(payload: Record<string, unknown>): void {
 	}
 }
 
+// ─── Stream Cleanup ─────────────────────────────────────────────────────────────
+
+function cleanUpStream(): void {
+	if (chatRunning && currentMessageId) {
+		sendToRenderer("chat", {
+			content: fullContent,
+			delta: false,
+			done: true,
+			messageId: currentMessageId,
+		} as IChatPayload);
+	}
+	chatRunning = false;
+	currentMessageId = null;
+	fullContent = "";
+}
+
 // ─── Connection Management ─────────────────────────────────────────────────────
 
 export function configure(serverUrl: string, token: string, userEmail: string): void {
@@ -291,6 +307,13 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 		pendingSocket = socket;
 
 		let connected = false;
+		let resolved = false;
+
+		const safeResolve = (result: { success: boolean; error?: string }): void => {
+			if (resolved) return;
+			resolved = true;
+			resolve(result);
+		};
 
 		// Wait for hello-ok response to confirm connection
 		const onFirstMessage = (raw: WebSocket.Data): void => {
@@ -320,7 +343,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 					socket.removeListener("message", onFirstMessage);
 					socket.on("message", handleMessage);
 
-					resolve({ success: true });
+					safeResolve({ success: true });
 					return;
 				}
 			}
@@ -333,7 +356,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 				pendingSocket = null;
 				connectionState = "disconnected";
 				const errMsg = JSON.stringify((msg as Record<string, unknown>).error || "Authentication failed");
-				resolve({ success: false, error: errMsg });
+				safeResolve({ success: false, error: errMsg });
 			}
 		};
 
@@ -349,7 +372,14 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 			if (connected) {
 				connectionState = "disconnected";
 				sendToRenderer("status", { state: "disconnected", message: "Connection closed" });
+				cleanUpStream();
 				if (mainWindowRef) scheduleReconnect();
+			} else {
+				// Socket closed before handshake completed — resolve the promise
+				if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+				pendingSocket = null;
+				connectionState = "disconnected";
+				safeResolve({ success: false, error: "Connection closed before handshake completed" });
 			}
 		});
 
@@ -358,7 +388,7 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 				if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
 				pendingSocket = null;
 				connectionState = "disconnected";
-				resolve({ success: false, error: `WebSocket error: ${err.message}` });
+				safeResolve({ success: false, error: `WebSocket error: ${err.message}` });
 			} else {
 				sendToRenderer("error", { code: "WS_ERROR", message: err.message });
 			}
@@ -374,13 +404,15 @@ export async function connect(): Promise<{ success: boolean; error?: string }> {
 				pendingSocket = null;
 				connectTimeout = null;
 				connectionState = "disconnected";
-				resolve({ success: false, error: "Connection handshake timed out" });
+				safeResolve({ success: false, error: "Connection handshake timed out" });
 			}
 		}, 10000);
 	});
 }
 
 export function disconnect(): void {
+	cleanUpStream();
+
 	if (connectTimeout) {
 		clearTimeout(connectTimeout);
 		connectTimeout = null;
@@ -403,9 +435,6 @@ export function disconnect(): void {
 	}
 	connectionState = "disconnected";
 	reconnectAttempts = 0;
-	chatRunning = false;
-	currentMessageId = null;
-	fullContent = "";
 
 	// Clear pending requests
 	for (const [id, pending] of pendingRequests) {

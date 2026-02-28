@@ -2,7 +2,7 @@
 
 ## Code Search (ChunkHound)
 
-All 20 TeachUpbeat repositories are indexed locally with ChunkHound. Use these tools for code discovery:
+All 21 TeachUpbeat repositories are indexed locally with ChunkHound. Use these tools for code discovery:
 
 - **search_semantic**: Concept-based search. Use when you're unsure of exact keywords.
   - Example: `search_semantic("authentication middleware", repo="administrator-portal")`

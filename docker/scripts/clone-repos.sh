@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPOS_DIR="${1:-/repos}"
 
-# All 20 TeachUpbeat repositories
+# All 21 TeachUpbeat repositories
 REPOS=(
   # Infrastructure & DevOps
   "upbeat-aws-infrastructure"
@@ -31,6 +31,8 @@ REPOS=(
   # Tooling & Documentation
   "spawnee"
   "upbeat-documentation"
+  # Knowledge Base
+  "swanson-db"
 )
 
 echo "=== Cloning ${#REPOS[@]} TeachUpbeat repositories (read-only) ==="

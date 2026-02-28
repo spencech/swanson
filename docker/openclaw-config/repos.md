@@ -1,6 +1,6 @@
 # Upbeat Projects Repository Catalog
 
-This document provides an overview of all 20 repositories in the TeachUpbeat organization available to Swanson.
+This document provides an overview of all 21 repositories in the TeachUpbeat organization available to Swanson.
 
 For deeper per-repo context (key files, patterns, cross-repo dependencies, common modification patterns), read `/workspace/repos/<slug>/AGENTS.md` when it exists.
 
@@ -129,6 +129,28 @@ Repository of spawnee YAML task templates for orchestrating Cursor Cloud Agent w
 `https://github.com/TeachUpbeat/upbeat-documentation.git`
 
 Platform documentation and guides for the Upbeat system. Contains architecture docs, API references, onboarding guides, and operational runbooks.
+
+---
+
+## Knowledge Base
+
+### swanson-db
+`https://github.com/TeachUpbeat/swanson-db.git`
+
+Curated AI knowledge base containing education research, database documentation, and CRM data. No application code — this repo exists purely to give agents grounded context about the Upbeat ecosystem.
+
+**Contents:**
+
+- **upbeat-research/** — 7 primary Upbeat research publications (teacher retention, engagement, working conditions, principal turnover, belonging & wellbeing) plus 261 cited secondary research articles. Includes a master citation compendium and a research-map linking publications to their citations.
+- **upbeat-database/** — Complete MySQL 8.4 DDL schema dump (50+ tables) and a SQL query compendium cataloging ~546 queries across 11 repositories with function names, descriptions, and raw SQL.
+- **upbeat-hubspot/** — HubSpot CRM export with 153 active customers and ~23,750 prospects. Each company has a markdown file with contacts, deals, industry, location, and revenue data. Includes pipeline stage breakdowns, account metrics, and a master index.
+
+**When to search this repo:**
+- Questions about Upbeat's research findings, citations, or education literature
+- Database schema lookups (table structures, column definitions, relationships)
+- SQL query discovery by function name, table, or behavior
+- Customer or prospect lookups (contacts, deals, industry, location)
+- Sales pipeline metrics and deal analysis
 
 ---
 

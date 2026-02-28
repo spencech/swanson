@@ -9,7 +9,7 @@ RUN test -n "$GITHUB_PAT" || (echo "GITHUB_PAT build arg required" && exit 1)
 
 RUN mkdir -p /repos
 
-# Clone all 20 repos read-only (develop branch preferred, fallback to default)
+# Clone all 21 repos read-only (develop branch preferred, fallback to default)
 COPY scripts/clone-repos.sh /tmp/clone-repos.sh
 RUN chmod +x /tmp/clone-repos.sh && GITHUB_PAT=$GITHUB_PAT /tmp/clone-repos.sh /repos
 

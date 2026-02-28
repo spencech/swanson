@@ -39,6 +39,7 @@
 		{ "name": "pdf-generator", "path": "/workspace/repos/pdf-generator" },
 		{ "name": "google-presentations", "path": "/workspace/repos/google-presentations" },
 		{ "name": "spawnee", "path": "/workspace/repos/spawnee" },
-		{ "name": "upbeat-documentation", "path": "/workspace/repos/upbeat-documentation" }
+		{ "name": "upbeat-documentation", "path": "/workspace/repos/upbeat-documentation" },
+		{ "name": "swanson-db", "path": "/workspace/repos/swanson-db" }
 	]
 }

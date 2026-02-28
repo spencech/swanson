@@ -12,7 +12,7 @@ Your AGENTS.md must be **accurate, concrete, and grounded in the actual code**. 
 
 ## The Ecosystem
 
-There are 20 repositories in the TeachUpbeat GitHub organization. Swanson has read-only access to all of them and uses ChunkHound (code search) to find patterns, files, and architecture across repos. The full catalog:
+There are 21 repositories in the TeachUpbeat GitHub organization. Swanson has read-only access to all of them and uses ChunkHound (code search) to find patterns, files, and architecture across repos. The full catalog:
 
 | GitHub Slug | Folder (Logical Name) | Default Branch | Category |
 |---|---|---|---|
@@ -36,6 +36,7 @@ There are 20 repositories in the TeachUpbeat GitHub organization. Swanson has re
 | `upbeat-sendgrid-websocket` | upbeat-sendgrid-websocket | develop | Email — SendGrid real-time WebSocket events |
 | `spawnee` | upbeat-spawnee-plans | develop | Tooling — Spawnee task plan templates and orchestration configs |
 | `upbeat-documentation` | upbeat-documentation | develop | Documentation — Platform documentation and guides |
+| `swanson-db` | swanson-db | develop | Knowledge Base — Research publications, HubSpot CRM data, database schema/SQL catalog |
 
 ### How Swanson Uses the `repository` Field
 
@@ -239,6 +240,7 @@ Write the file using exactly this structure. Every section is required unless ma
    | `upbeat-sendgrid-websocket` | upbeat-sendgrid-websocket |
    | `spawnee` | upbeat-spawnee-plans |
    | `upbeat-documentation` | upbeat-documentation |
+   | `swanson-db` | swanson-db |
 
 5. **Keep it under 300 lines.** AGENTS.md is read by AI agents in context windows — bloat degrades performance. Be dense, not verbose. Prefer tables and lists over paragraphs.
 
@@ -256,7 +258,7 @@ Write the file using exactly this structure. Every section is required unless ma
 
 ## Execution
 
-Write one `AGENTS.md` per repo. Place it at the repository root (`/AGENTS.md`). Process all 20 repos:
+Write one `AGENTS.md` per repo. Place it at the repository root (`/AGENTS.md`). Process all 21 repos:
 
 **Infrastructure & DevOps:**
 1. `upbeat-aws-infrastructure`
@@ -289,6 +291,9 @@ Write one `AGENTS.md` per repo. Place it at the repository root (`/AGENTS.md`). 
 **Tooling & Documentation:**
 19. `spawnee`
 20. `upbeat-documentation`
+
+**Knowledge Base:**
+21. `swanson-db`
 
 For each repo, read the actual code before writing. Do not copy-paste between repos — each AGENTS.md should reflect that repo's actual structure, patterns, and files.
 

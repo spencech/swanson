@@ -13,9 +13,10 @@ All 20 TeachUpbeat repositories are indexed locally with ChunkHound. Use these t
 
 ## Repo Maintenance
 
-- **refresh_repos**: Pull latest code from repos and re-index. Use when the user mentions stale code or before planning against recently changed repos.
+- **refresh_repos**: Pull latest code from repos and re-index with ChunkHound. Always do both steps — a pull without re-indexing leaves the search results stale.
   - Example: `refresh_repos(repo="administrator-portal")` — refresh only one repo
-  - Example: `refresh_repos()` — refresh all repos (slow)
+  - Example: `refresh_repos()` — refresh all repos (slow, ~2 min)
+  - **When to call**: user mentions recent commit/PR/deploy; search results look outdated; before planning against a repo the user says changed recently
 
 ## Plan Management
 

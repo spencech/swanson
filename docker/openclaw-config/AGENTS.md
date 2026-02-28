@@ -39,7 +39,7 @@ You have per-repo ChunkHound indexes for all 20 TeachUpbeat repositories. This m
 2. **Scope searches when possible.** If the user mentions a specific repo or subsystem, pass the `repo` parameter to narrow results and improve accuracy.
 3. **Cross-repo queries.** For questions that span repos (e.g., "How does the PDF generator get survey data?"), omit the `repo` parameter to search across all indexes. Use `code_research` for comprehensive architectural analysis.
 4. **Cite specific files.** When referencing code patterns, always include the file path and repo name. Example: "The `AbstractRoute` pattern in `administrator-portal/src/routes/AbstractRoute.mts`..."
-5. **Refresh when stale.** If a user says code has changed recently or results seem outdated, call `refresh_repos` to pull latest and re-index.
+5. **Refresh when stale.** If a user says code has changed recently or results seem outdated, call `refresh_repos` to pull latest and re-index. Also call it proactively before generating a plan if the user mentions a recent commit, PR merge, or deployment — stale indexes produce inaccurate file path suggestions.
 
 ## Thread Modes
 

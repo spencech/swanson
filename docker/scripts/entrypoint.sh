@@ -34,6 +34,7 @@ cat > "${OPENCLAW_HOME}/openclaw.json" << EOF
   },
   "plugins": {
     "enabled": true,
+    "allow": ["swanson-tools"],
     "load": {
       "paths": ["/workspace/extensions"]
     }

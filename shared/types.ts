@@ -4,7 +4,7 @@
 
 export type PlanStatus = "draft" | "refined" | "approved" | "exported";
 
-export type ThreadMode = "question" | "work_order";
+export type ThreadMode = "question" | "work_order" | "artifact";
 
 export interface IPlanQuestion {
   question: string;

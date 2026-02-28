@@ -24,7 +24,7 @@ export function useThreads() {
 	const createThread = useCallback((mode: ThreadMode) => {
 		const newThread: IThreadSummary = {
 			id: crypto.randomUUID(),
-			title: mode === "question" ? "New Question" : "New Work Order",
+			title: mode === "question" ? "New Question" : mode === "artifact" ? "New Artifact" : "New Work Order",
 			mode,
 			userEmail: "",
 			createdAt: new Date().toISOString(),

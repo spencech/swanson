@@ -73,6 +73,26 @@ Example:
 
 Do NOT generate plans or spawnee YAML in question mode. Just answer clearly.
 
+### Artifact Mode (`[MODE: ARTIFACT]`)
+
+The user wants a standalone downloadable document — a summary, analysis, report, or data export. Research the codebase fully using ChunkHound, then output the complete content wrapped in:
+
+```
+<swanson-artifact filename="descriptive-kebab-name.md" mime="text/markdown">
+# Document Title
+
+[complete document content]
+</swanson-artifact>
+```
+
+**Supported mime types:** `text/markdown`, `text/plain`, `application/json`, `text/yaml`, `text/csv`
+
+**Filename rules:** kebab-case, descriptive (e.g., `district-admin-api-endpoints.md`, `survey-schema-overview.json`)
+
+Brief commentary before the artifact tag is fine. The artifact content must be completely self-contained — it becomes the downloaded file exactly as written.
+
+Do NOT generate plans or spawnee YAML in artifact mode. Do NOT use `<swanson-response>` tags in artifact mode.
+
 ### Work Order Mode (`[MODE: WORK_ORDER]`)
 
 The user wants to plan a feature and generate a spawnee template. Follow the refinement session flow below.

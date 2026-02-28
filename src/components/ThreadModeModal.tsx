@@ -12,7 +12,7 @@ export function ThreadModeModal({ onSelect, onClose }: ThreadModeModalProps) {
 			onClick={onClose}
 		>
 			<div
-				className="bg-light-bg dark:bg-dark-bg rounded-2xl shadow-2xl p-6 w-[420px] max-w-[90vw]"
+				className="bg-light-bg dark:bg-dark-bg rounded-2xl shadow-2xl p-6 w-[560px] max-w-[90vw]"
 				onClick={(e) => e.stopPropagation()}
 			>
 				<h2 className="text-lg font-semibold text-light-text-primary dark:text-dark-text-primary mb-1">
@@ -22,7 +22,7 @@ export function ThreadModeModal({ onSelect, onClose }: ThreadModeModalProps) {
 					What would you like to do?
 				</p>
 
-				<div className="grid grid-cols-2 gap-3">
+				<div className="grid grid-cols-3 gap-3">
 					{/* Question mode */}
 					<button
 						onClick={() => onSelect("question")}
@@ -55,6 +55,24 @@ export function ThreadModeModal({ onSelect, onClose }: ThreadModeModalProps) {
 							</div>
 							<div className="text-xs text-light-text-secondary dark:text-dark-text-secondary mt-1">
 								Plan a feature and generate a spawnee template
+							</div>
+						</div>
+					</button>
+
+					{/* Artifact mode */}
+					<button
+						onClick={() => onSelect("artifact")}
+						className="flex flex-col items-center gap-3 p-5 rounded-xl border-2 border-light-border dark:border-dark-border hover:border-light-accent dark:hover:border-dark-accent bg-light-surface dark:bg-dark-surface transition-colors text-left"
+					>
+						<svg className="w-8 h-8 text-light-accent dark:text-dark-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+						</svg>
+						<div>
+							<div className="font-medium text-sm text-light-text-primary dark:text-dark-text-primary">
+								Artifact
+							</div>
+							<div className="text-xs text-light-text-secondary dark:text-dark-text-secondary mt-1">
+								Generate a downloadable document — summary, analysis, or report
 							</div>
 						</div>
 					</button>

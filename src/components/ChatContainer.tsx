@@ -29,7 +29,7 @@ export function ChatContainer() {
 		const isFirstMessage = messages.length === 0
 		let agentMessage = content
 		if (isFirstMessage && activeThread?.mode) {
-			const modeLabel = activeThread.mode === "question" ? "QUESTION" : "WORK_ORDER"
+			const modeLabel = activeThread.mode === "question" ? "QUESTION" : activeThread.mode === "artifact" ? "ARTIFACT" : "WORK_ORDER"
 			agentMessage = `[MODE: ${modeLabel}]\n\nThis is a new conversation thread. The user cannot see messages from other threads — do not tell them to scroll up or reference anything you have shown them previously.\n\n${content}`
 		}
 

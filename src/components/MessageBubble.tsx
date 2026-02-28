@@ -21,6 +21,20 @@ function tryParseHtml(content: string): string | null {
 	return DOMPurify.sanitize(match[1], { ALLOWED_TAGS, ALLOWED_ATTR: ["href", "target", "class"] })
 }
 
+interface IArtifact {
+	filename: string
+	mimeType: string
+	content: string
+}
+
+function tryParseArtifact(content: string): IArtifact | null {
+	const match = content.match(
+		/<swanson-artifact\s+filename="([^"]+)"\s+mime="([^"]+)"[^>]*>([\s\S]*?)<\/swanson-artifact>/
+	)
+	if (!match) return null
+	return { filename: match[1], mimeType: match[2], content: match[3].trim() }
+}
+
 function CopyButton({ text }: { text: string }) {
 	const [copied, setCopied] = useState(false)
 
@@ -123,6 +137,12 @@ export function MessageBubble({ message, onEditRequest }: MessageBubbleProps) {
 		return null
 	}, [message.content, isPlanMessage])
 
+	// Check if this message contains a downloadable artifact
+	const artifact = useMemo(() => {
+		if (isUser || message.isStreaming) return null
+		return tryParseArtifact(message.content)
+	}, [message.content, message.isStreaming, isUser])
+
 	// Check if this message contains structured HTML (from question mode)
 	const sanitizedHtml = useMemo(() => {
 		if (isUser || message.isStreaming) return null
@@ -141,6 +161,49 @@ export function MessageBubble({ message, onEditRequest }: MessageBubbleProps) {
 						</div>
 					)}
 					<PlanCard onEditRequest={onEditRequest} />
+				</div>
+			</div>
+		)
+	}
+
+	// Render artifact: scrollable preview + download button
+	if (artifact) {
+		const handleDownload = () => {
+			const blob = new Blob([artifact.content], { type: artifact.mimeType })
+			const url = URL.createObjectURL(blob)
+			const a = document.createElement("a")
+			a.href = url
+			a.download = artifact.filename
+			document.body.appendChild(a)
+			a.click()
+			document.body.removeChild(a)
+			URL.revokeObjectURL(url)
+		}
+		return (
+			<div className="flex justify-start">
+				<div className="max-w-[90%] bg-light-surface dark:bg-dark-surface rounded-2xl rounded-bl-md overflow-hidden">
+					{/* Header: filename + actions */}
+					<div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-light-border dark:border-dark-border bg-light-bg dark:bg-dark-bg">
+						<span className="text-xs font-mono text-light-text-secondary dark:text-dark-text-secondary truncate">
+							{artifact.filename}
+						</span>
+						<div className="flex items-center gap-2 shrink-0">
+							<CopyButton text={artifact.content} />
+							<button
+								onClick={handleDownload}
+								className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-light-accent dark:bg-dark-accent text-white text-xs font-medium hover:opacity-90 transition-opacity"
+							>
+								<svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+								</svg>
+								Download
+							</button>
+						</div>
+					</div>
+					{/* Scrollable content preview */}
+					<div className="px-5 py-4 prose-swanson text-sm text-light-text-primary dark:text-dark-text-primary max-h-[400px] overflow-y-auto">
+						<ReactMarkdown remarkPlugins={[remarkGfm]}>{artifact.content}</ReactMarkdown>
+					</div>
 				</div>
 			</div>
 		)

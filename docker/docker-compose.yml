@@ -13,6 +13,8 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - CHUNKHOUND_EMBEDDING_API_KEY=${OPENAI_API_KEY}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-swanson-dev-token}
+      # Spawnee (Cursor Cloud Agent orchestration)
+      - CURSOR_API_KEY=${CURSOR_API_KEY:-}
       # MySQL (read-only RDS access)
       - MYSQL_HOST=${MYSQL_HOST:-}
       - MYSQL_PORT=${MYSQL_PORT:-3306}

@@ -105,6 +105,101 @@ query-athena 'SHOW TABLES'
 
 **Cost awareness:** Athena charges per TB scanned. The stats footer shows data scanned for each query. Prefer filtering with `WHERE` clauses and using `LIMIT` to reduce scan volume.
 
+## Spawnee (Plan Execution)
+
+Use `spawnee` to execute approved plans by orchestrating Cursor Cloud Agents. Spawnee dispatches YAML task templates to cloud agents with dependency resolution, parallel execution, and automatic retries.
+
+**Authentication:** Uses `CURSOR_API_KEY` environment variable (pre-configured). No `-k` flag needed.
+
+### Commands
+
+```bash
+# Execute a template
+spawnee run template.yaml
+
+# Dry run — preview what would happen without spawning agents
+spawnee run template.yaml --dry-run
+
+# Execute with resume capability (writes status back to YAML)
+spawnee run template.yaml --update-source
+
+# Validate template structure
+spawnee validate template.yaml
+
+# Check status of running agents
+spawnee status
+
+# Cancel a running agent
+spawnee cancel <conversationId>
+
+# List available models
+spawnee models
+
+# Initialize a new template interactively
+spawnee init
+```
+
+### `spawnee run` Flags
+
+| Flag | Description |
+|------|-------------|
+| `-d, --dry-run` | Preview execution without spawning agents |
+| `-c, --concurrency N` | Max parallel agents (default: 5) |
+| `-t, --timeout N` | Task timeout in ms (default: 3600000 = 1 hour) |
+| `--poll-interval N` | Status polling interval in ms (default: 5000) |
+| `--state-file PATH` | Custom state file location |
+| `--update-source` | Write status back to template YAML (enables resume) |
+| `--no-persist` | Don't persist state to disk |
+
+### Template Structure
+
+```yaml
+name: "PD-1234: Feature Name"
+repository:
+  url: "https://github.com/TeachUpbeat/repo.git"
+  branch: "spawnee/PD-1234-feature-name"
+  baseBranch: "spawnee/PD-1234-feature-name"
+model: "composer-1"
+
+tasks:
+  - id: task-id
+    name: "Task description"
+    branch: "cursor/spawnee/PD-1234-task-description"
+    dependsOn: []
+    prompt: |
+      [Detailed agent instructions]
+```
+
+### Key Rules
+
+1. **Never target develop/main directly.** All templates use an isolated integration branch: `spawnee/<ticket>-<description>`
+2. **Each task gets its own branch** checked out from the integration branch
+3. **PRs target the integration branch**, not develop/main
+4. **Default model**: `composer-1` — only change when there's a specific reason
+5. **Dependent tasks need merge instructions** — agents start fresh with no knowledge of prior work:
+   ```yaml
+   prompt: |
+     ## PREREQUISITE: Merge Dependency Branch
+     ```bash
+     git fetch origin
+     git checkout <your-branch>
+     git merge origin/<dependency-branch> --no-edit
+     ```
+   ```
+6. **Prefer fewer tasks with more work each** — only split when targeting different repos, unrelated areas, or needing a review breakpoint
+
+### Available Models
+
+Query live with `spawnee models`. Known working models:
+- `composer-1` — Cursor's general-purpose agent model **(default)**
+- `claude-4.5-opus-high-thinking` — Best for complex reasoning
+- `gpt-5.2` / `gpt-5.2-high` — OpenAI models
+- `gemini-3-pro` — Google model
+
+### Existing Templates
+
+Previously generated spawnee templates are in `/workspace/repos/spawnee/`. Check there for examples and existing plans before creating new ones.
+
 ## Repository Layout
 
 Repos are at `/workspace/repos/<repo-name>/`. ChunkHound indexes are per-repo in `.chunkhound/` directories.
@@ -116,3 +211,4 @@ Per-repo AGENTS.md files (when present) are at `/workspace/repos/<repo-name>/AGE
 - **Gateway**: OpenClaw on port 18789
 - **Persistence**: `/workspace/threads/`, `/workspace/plans/`
 - **LLM**: Anthropic Claude via API key
+- **Spawnee**: Cursor Cloud Agent orchestration via `CURSOR_API_KEY`

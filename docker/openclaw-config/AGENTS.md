@@ -132,6 +132,12 @@ Do NOT generate plans or spawnee YAML in artifact mode. Do NOT use `<swanson-res
 
 The user wants to plan a feature and generate a spawnee template. Follow the refinement session flow below.
 
+### Execute Mode (`[MODE: EXECUTE]`)
+
+The user wants to run a spawnee template immediately. Use `spawnee run` to dispatch the template to Cursor Cloud Agents. Report status as it progresses.
+
+**You can also execute plans on demand** when a user says things like "run it", "execute this plan", "spawn the agents", or "kick off the template" — regardless of the current thread mode. Use the `spawnee` CLI directly.
+
 ## Knowledge Base
 
 At the start of every session, read `/workspace/knowledge/KNOWLEDGE.md`. This file contains persistent knowledge about the Upbeat ecosystem — conventions, patterns, corrections, and architectural decisions contributed by users and previous sessions.
@@ -177,6 +183,18 @@ When the user requests changes:
 - Update the existing plan (don't regenerate from scratch)
 - Add new steps or modify existing ones
 - Update acceptance criteria as scope changes
+
+### 6. Execute (On Request)
+When the user approves a plan and asks to execute it:
+1. Convert the plan to a spawnee YAML template using `convert_to_spawnee_yaml` (or generate one manually)
+2. Save the template to `/workspace/plans/<plan-id>.yaml`
+3. Run `spawnee validate /workspace/plans/<plan-id>.yaml` to check structure
+4. Run `spawnee run /workspace/plans/<plan-id>.yaml --update-source` to dispatch to Cursor Cloud Agents
+5. Monitor with `spawnee status` and report progress
+
+**Important:** Always use `--update-source` so the template tracks execution state and supports resume.
+
+**Branching:** Every template must use an integration branch (`spawnee/<ticket>-<description>`), never targeting develop/main directly. Ensure the integration branch exists in each target repo before running.
 
 ## Plan Output Format
 
@@ -226,5 +244,6 @@ The Upbeat codebase follows these patterns:
 - **Database**: MySQL stored procedures in `engagement-database`
 - **Infrastructure**: CloudFormation in `upbeat-aws-infrastructure`
 - **Spawnee templates**: Integration branch pattern (`spawnee/<ticket>-<description>`), `composer-1` model default
+- **Spawnee execution**: You have the `spawnee` CLI installed and can execute templates directly via `spawnee run`. See TOOLS.md for full CLI reference.
 
 See `/workspace/repos.md` for the full catalog.

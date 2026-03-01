@@ -32,8 +32,8 @@ FROM node:22-bookworm
 # Install system dependencies
 RUN apt-get update && apt-get install -y git jq python3 python3-venv default-mysql-client && rm -rf /var/lib/apt/lists/*
 
-# Install OpenClaw via npm
-RUN npm install -g openclaw@latest
+# Install OpenClaw and Spawnee via npm
+RUN npm install -g openclaw@latest spawnee@latest
 
 # Install ChunkHound via uv (Python package)
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \

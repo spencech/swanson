@@ -224,6 +224,10 @@ export function MessageBubble({ message, onEditRequest }: MessageBubbleProps) {
 		)
 	}
 
+	// Hide the empty streaming placeholder — SwansonThinking covers this state
+	// Also hide streaming HTML responses so raw markup isn't visible mid-stream
+	if (message.isStreaming && (!message.content || message.content.trimStart().startsWith("<swanson-response>"))) return null
+
 	return (
 		<div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
 			<div

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useChatStore } from '../stores/chatStore'
 import { useThreadStore } from '../stores/threadStore'
 import { MessageBubble } from './MessageBubble'
+import { SwansonThinking } from './SwansonThinking'
 
 interface MessageListProps {
 	onEditRequest?: () => void
@@ -52,17 +53,9 @@ export function MessageList({ onEditRequest }: MessageListProps) {
 					<MessageBubble key={message.id} message={message} onEditRequest={onEditRequest} />
 				))}
 
-				{/* Typing indicator when processing */}
-				{isProcessing && !messages.some(m => m.isStreaming) && (
-					<div className="flex justify-start">
-						<div className="bg-light-surface dark:bg-dark-surface px-4 py-3 rounded-2xl rounded-bl-md">
-							<div className="flex items-center gap-1">
-								<div className="w-2 h-2 rounded-full bg-light-text-secondary dark:bg-dark-text-secondary animate-bounce" style={{ animationDelay: '0ms' }} />
-								<div className="w-2 h-2 rounded-full bg-light-text-secondary dark:bg-dark-text-secondary animate-bounce" style={{ animationDelay: '150ms' }} />
-								<div className="w-2 h-2 rounded-full bg-light-text-secondary dark:bg-dark-text-secondary animate-bounce" style={{ animationDelay: '300ms' }} />
-							</div>
-						</div>
-					</div>
+				{/* Thinking indicator with rotating Swanson quotes — visible until real content streams in */}
+				{isProcessing && !messages.some(m => m.isStreaming && m.content && !m.content.trimStart().startsWith("<swanson-response>")) && (
+					<SwansonThinking />
 				)}
 
 				<div />

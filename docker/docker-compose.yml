@@ -29,7 +29,7 @@ services:
       # CloudFront CDN (signed URLs for toolkit resources)
       - CF_DOMAIN=${CF_DOMAIN:-}
       - CF_KEY_PAIR_ID=${CF_KEY_PAIR_ID:-}
-      - CF_PRIVATE_KEY_SECRET=${CF_PRIVATE_KEY_SECRET:-}
+      - CF_PRIVATE_KEY_B64=${CF_PRIVATE_KEY_B64:-}
     volumes:
       - swanson-threads:/workspace/threads
       - swanson-plans:/workspace/plans

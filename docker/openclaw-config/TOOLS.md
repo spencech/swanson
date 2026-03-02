@@ -126,7 +126,7 @@ cdn-sign "research/literature-review-2.0.pdf"
 **Output:** A single signed URL on stdout. Embed it directly in responses as a clickable link.
 
 **Notes:**
-- The CloudFront signing key is fetched from Secrets Manager at container startup
+- The CloudFront signing key is decoded from `CF_PRIVATE_KEY_B64` at container startup
 - URLs expire after the specified duration — default 1 hour is suitable for most responses
 - Use longer expiry (`--expires 86400`) if the link will be shared or referenced later
 

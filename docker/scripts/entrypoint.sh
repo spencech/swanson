@@ -78,23 +78,19 @@ else
   echo "Knowledge base found at /workspace/knowledge/"
 fi
 
-# Fetch CloudFront signing key from Secrets Manager (if configured)
+# Decode CloudFront signing key from base64 env var (if configured)
 CF_KEY_PATH="/tmp/cf-private-key.pem"
-if [[ -n "${CF_PRIVATE_KEY_SECRET:-}" && -n "${AWS_ACCESS_KEY_ID:-}" ]]; then
-  echo "Fetching CloudFront signing key from Secrets Manager..."
-  if aws secretsmanager get-secret-value \
-      --secret-id "${CF_PRIVATE_KEY_SECRET}" \
-      --query 'SecretString' \
-      --output text \
-      --region "${AWS_REGION:-us-east-1}" > "${CF_KEY_PATH}" 2>/dev/null; then
-    chmod 600 "${CF_KEY_PATH}"
-    echo "CloudFront signing key cached at ${CF_KEY_PATH}"
+if [[ -n "${CF_PRIVATE_KEY_B64:-}" ]]; then
+  echo "$CF_PRIVATE_KEY_B64" | base64 -d > "$CF_KEY_PATH" 2>/dev/null
+  if [[ -s "$CF_KEY_PATH" ]] && head -1 "$CF_KEY_PATH" | grep -q "BEGIN"; then
+    chmod 600 "$CF_KEY_PATH"
+    echo "CloudFront signing key decoded to ${CF_KEY_PATH}"
   else
-    echo "WARNING: Failed to fetch CloudFront signing key — cdn-sign will not work"
-    rm -f "${CF_KEY_PATH}"
+    echo "WARNING: CF_PRIVATE_KEY_B64 is set but failed to decode — cdn-sign will not work"
+    rm -f "$CF_KEY_PATH"
   fi
 else
-  echo "CloudFront signing not configured (CF_PRIVATE_KEY_SECRET or AWS credentials missing)"
+  echo "CloudFront signing not configured (CF_PRIVATE_KEY_B64 not set)"
 fi
 
 # Verify repos are present

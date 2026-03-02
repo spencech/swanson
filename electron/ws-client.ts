@@ -242,9 +242,17 @@ function handleAgentEvent(payload: Record<string, unknown>): void {
 		return;
 	}
 
-	// Tool events — could forward to renderer for tool-use UI
+	// Tool events — forward to renderer as activity indicator
 	if (stream === "tool") {
-		return; // Silently consume for now
+		const name = (data?.name as string) || (data?.tool as string) || "unknown";
+		const toolPhase = data?.phase as string | undefined;
+		const isStart = !toolPhase || toolPhase === "start" || toolPhase === "call" || toolPhase === "running";
+		sendToRenderer("tool_activity", {
+			name,
+			description: name,
+			active: isStart,
+		});
+		return;
 	}
 }
 

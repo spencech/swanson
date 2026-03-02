@@ -15,12 +15,14 @@ interface ChatState {
   messages: Message[]
   isProcessing: boolean
   activePlan: IPlan | null
+  toolActivity: string | null
   addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => string
   updateMessage: (id: string, content: string) => void
   completeMessage: (id: string) => void
   attachPlanToMessage: (messageId: string, planId: string) => void
   setActivePlan: (plan: IPlan | null) => void
   setProcessing: (processing: boolean) => void
+  setToolActivity: (activity: string | null) => void
   clearMessages: () => void
   loadHistory: (threadId: string, messages: Message[]) => void
 }
@@ -29,6 +31,7 @@ export const useChatStore = create<ChatState>((set) => ({
   messages: [],
   isProcessing: false,
   activePlan: null,
+  toolActivity: null,
 
   addMessage: (message) => {
     const id = crypto.randomUUID()
@@ -75,6 +78,10 @@ export const useChatStore = create<ChatState>((set) => ({
 
   setProcessing: (processing) => {
     set({ isProcessing: processing })
+  },
+
+  setToolActivity: (activity) => {
+    set({ toolActivity: activity })
   },
 
   clearMessages: () => {

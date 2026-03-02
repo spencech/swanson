@@ -112,6 +112,7 @@ export type WSMessageType =
   // System
   | "status"
   | "error"
+  | "tool_activity"
   | "auth";
 
 export interface IWSMessage {
@@ -213,6 +214,14 @@ export interface IThreadsListResponsePayload {
   threads: IThreadSummary[];
 }
 
+// ─── Tool Activity Payloads ────────────────────────────────────────────────────
+
+export interface IToolActivityPayload {
+  name: string;
+  description: string;
+  active: boolean;
+}
+
 // ─── System Payloads ───────────────────────────────────────────────────────────
 
 export interface IStatusPayload {
@@ -256,6 +265,7 @@ export interface IWSPayloadMap {
   "threads:list_response": IThreadsListResponsePayload;
   "status": IStatusPayload;
   "error": IErrorPayload;
+  "tool_activity": IToolActivityPayload;
   "auth": IAuthPayload;
 }
 

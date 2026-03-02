@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import quotes from "../../assets/ron-swanson-quotes.json"
+import { useChatStore } from "../stores/chatStore"
 
 function pickRandom(exclude: number): number {
 	if (quotes.length <= 1) return 0
@@ -13,6 +14,7 @@ function pickRandom(exclude: number): number {
 const ROTATE_INTERVAL = 12000
 
 export function SwansonThinking() {
+	const toolActivity = useChatStore((state) => state.toolActivity)
 	const [index, setIndex] = useState(() => Math.floor(Math.random() * quotes.length))
 	const [fading, setFading] = useState(false)
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -42,13 +44,19 @@ export function SwansonThinking() {
 				<div className="flex items-start gap-2.5">
 					{/* Pulsing dot — signals activity */}
 					<div className="mt-1.5 shrink-0 w-2 h-2 rounded-full bg-light-accent dark:bg-dark-accent animate-pulse" />
-					<p
-						className={`text-sm italic leading-relaxed text-light-text-secondary dark:text-dark-text-secondary transition-opacity duration-400 ${
-							fading ? "opacity-0" : "opacity-100"
-						}`}
-					>
-						&ldquo;{quotes[index]}&rdquo;
-					</p>
+					{toolActivity ? (
+						<p className="text-xs leading-relaxed text-light-text-secondary dark:text-dark-text-secondary transition-opacity duration-300">
+							{toolActivity}...
+						</p>
+					) : (
+						<p
+							className={`text-sm italic leading-relaxed text-light-text-secondary dark:text-dark-text-secondary transition-opacity duration-400 ${
+								fading ? "opacity-0" : "opacity-100"
+							}`}
+						>
+							&ldquo;{quotes[index]}&rdquo;
+						</p>
+					)}
 				</div>
 			</div>
 		</div>

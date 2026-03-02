@@ -1,7 +1,26 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
 import { useChatStore } from '../stores/chatStore'
 import { usePlanStore } from '../stores/planStore'
-import type { IWSMessage, IChatPayload, IStatusPayload, IErrorPayload, IPlanUpdatePayload, IPlanApprovedPayload, IPlanYamlPayload } from '../../shared/types'
+import type { IWSMessage, IChatPayload, IStatusPayload, IErrorPayload, IPlanUpdatePayload, IPlanApprovedPayload, IPlanYamlPayload, IToolActivityPayload } from '../../shared/types'
+
+const TOOL_LABELS: Record<string, string> = {
+  search_semantic: "Searching code by concept",
+  search_regex: "Searching code by pattern",
+  code_research: "Researching architecture",
+  remember: "Storing a memory",
+  recall: "Recalling memories",
+  relate: "Linking memories",
+  forget: "Archiving a memory",
+  consolidate: "Reviewing memory health",
+  validate_plan: "Validating plan",
+  convert_to_spawnee_yaml: "Generating template",
+  refresh_repos: "Refreshing repositories",
+  migrate_knowledge: "Migrating knowledge",
+}
+
+function toolDisplayName(name: string): string {
+  return TOOL_LABELS[name] || `Using ${name.replace(/_/g, " ")}`
+}
 
 type ConnectionState = 'disconnected' | 'connected' | 'reconnecting'
 
@@ -10,6 +29,7 @@ export function useOpenClaw() {
   const updateMessage = useChatStore((state) => state.updateMessage)
   const completeMessage = useChatStore((state) => state.completeMessage)
   const setProcessing = useChatStore((state) => state.setProcessing)
+  const setToolActivity = useChatStore((state) => state.setToolActivity)
   const setCurrentPlan = usePlanStore((state) => state.setCurrentPlan)
   const updatePlanStatus = usePlanStore((state) => state.updatePlanStatus)
 
@@ -37,6 +57,7 @@ export function useOpenClaw() {
               currentMessageIdRef.current = null
             }
             setProcessing(false)
+            setToolActivity(null)
             accumulatedTextRef.current = ''
           } else if (payload.delta) {
             // Streaming delta
@@ -95,6 +116,16 @@ export function useOpenClaw() {
           break
         }
 
+        case 'tool_activity': {
+          const payload = msg.payload as IToolActivityPayload
+          if (payload.active) {
+            setToolActivity(toolDisplayName(payload.name))
+          } else {
+            setToolActivity(null)
+          }
+          break
+        }
+
         case 'plan:update': {
           const payload = msg.payload as IPlanUpdatePayload
           setCurrentPlan(payload.plan)
@@ -124,7 +155,7 @@ export function useOpenClaw() {
     })
 
     return cleanup
-  }, [addMessage, updateMessage, completeMessage, setProcessing, setCurrentPlan, updatePlanStatus])
+  }, [addMessage, updateMessage, completeMessage, setProcessing, setToolActivity, setCurrentPlan, updatePlanStatus])
 
   // Connect to OpenClaw on mount
   useEffect(() => {

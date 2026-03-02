@@ -105,12 +105,12 @@ query-athena 'SHOW TABLES'
 
 **Cost awareness:** Athena charges per TB scanned. The stats footer shows data scanned for each query. Prefer filtering with `WHERE` clauses and using `LIMIT` to reduce scan volume.
 
-## S3 CDN (Presigned Download URLs)
+## CDN (Signed Download URLs)
 
-Use `s3-sign` to generate temporary presigned download URLs for files in the Upbeat CDN bucket (`upbeat-cdn-production-us-east-1`). Use this when referencing toolkit PDFs so users can download the original document.
+Use `cdn-sign` to generate CloudFront signed download URLs for files on the Upbeat CDN (`cdn.teachupbeat.com`). Use this when referencing toolkit PDFs so users can download the original document.
 
 ```bash
-s3-sign [--expires N] "S3_KEY"
+cdn-sign [--expires N] "RESOURCE_PATH"
 ```
 
 **Flags:**
@@ -118,15 +118,15 @@ s3-sign [--expires N] "S3_KEY"
 
 **Examples:**
 ```bash
-s3-sign "toolkit/appreciation-toolkit.pdf"
-s3-sign --expires 86400 "toolkit/31/learning-staff-languages-of-appreciation.pdf"
-s3-sign "research/literature-review-2.0.pdf"
+cdn-sign "toolkit/appreciation-toolkit.pdf"
+cdn-sign --expires 86400 "toolkit/31/learning-staff-languages-of-appreciation.pdf"
+cdn-sign "research/literature-review-2.0.pdf"
 ```
 
-**Output:** A single presigned URL on stdout. Embed it directly in responses as a clickable link.
+**Output:** A single signed URL on stdout. Embed it directly in responses as a clickable link.
 
 **Notes:**
-- Uses the same AWS credentials as Athena (pre-configured)
+- The CloudFront signing key is fetched from Secrets Manager at container startup
 - URLs expire after the specified duration — default 1 hour is suitable for most responses
 - Use longer expiry (`--expires 86400`) if the link will be shared or referenced later
 

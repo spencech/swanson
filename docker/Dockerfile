@@ -83,8 +83,8 @@ RUN chmod +x /usr/local/bin/refresh-repos
 # Copy database query wrapper scripts
 COPY scripts/query-mysql.sh /usr/local/bin/query-mysql
 COPY scripts/query-athena.sh /usr/local/bin/query-athena
-COPY scripts/s3-sign.sh /usr/local/bin/s3-sign
-RUN chmod +x /usr/local/bin/query-mysql /usr/local/bin/query-athena /usr/local/bin/s3-sign
+COPY scripts/s3-sign.sh /usr/local/bin/cdn-sign
+RUN chmod +x /usr/local/bin/query-mysql /usr/local/bin/query-athena /usr/local/bin/cdn-sign
 
 # Initialize persistence files
 RUN echo '{"threads":[]}' > /workspace/threads/index.json && \

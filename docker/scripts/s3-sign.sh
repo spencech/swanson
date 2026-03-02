@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# s3-sign — Generate presigned S3 URLs for CDN resources
-# Usage: s3-sign [--expires N] "S3_KEY"
+# cdn-sign — Generate CloudFront signed URLs for CDN resources
+# Usage: cdn-sign [--expires N] "RESOURCE_PATH"
 
 set -euo pipefail
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 EXPIRES=3600
 MAX_EXPIRES=604800
+CF_KEY_PATH="/tmp/cf-private-key.pem"
 
 # ── Parse flags ───────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -15,27 +16,25 @@ while [[ $# -gt 0 ]]; do
 			EXPIRES="$2"; shift 2 ;;
 		--help|-h)
 			cat <<'USAGE'
-Usage: s3-sign [OPTIONS] "S3_KEY"
+Usage: cdn-sign [OPTIONS] "RESOURCE_PATH"
 
-Generate a presigned download URL for a file in the Upbeat CDN bucket.
+Generate a CloudFront signed download URL for a file on the Upbeat CDN.
 
 Options:
   --expires N    URL validity in seconds (default: 3600 = 1 hour, max: 604800 = 7 days)
   -h, --help     Show this help
 
 Environment variables (required):
-  S3_BUCKET              S3 bucket name
-  AWS_ACCESS_KEY_ID      AWS credentials
-  AWS_SECRET_ACCESS_KEY  AWS credentials
-  AWS_REGION             AWS region (default: us-east-1)
+  CF_DOMAIN           CloudFront distribution domain (e.g., cdn.teachupbeat.com)
+  CF_KEY_PAIR_ID      CloudFront key pair ID
 
-Optional:
-  AWS_SESSION_TOKEN      Required for temporary STS credentials
+The private signing key must exist at /tmp/cf-private-key.pem
+(fetched automatically from Secrets Manager at container startup).
 
 Examples:
-  s3-sign "toolkit/appreciation-toolkit.pdf"
-  s3-sign --expires 86400 "toolkit/31/learning-staff-languages-of-appreciation.pdf"
-  s3-sign "research/literature-review-2.0.pdf"
+  cdn-sign "toolkit/appreciation-toolkit.pdf"
+  cdn-sign --expires 86400 "toolkit/31/learning-staff-languages-of-appreciation.pdf"
+  cdn-sign "research/literature-review-2.0.pdf"
 USAGE
 			exit 0
 			;;
@@ -48,28 +47,35 @@ USAGE
 	esac
 done
 
-KEY="${1:-}"
+RESOURCE_PATH="${1:-}"
 
 # ── Validate environment ─────────────────────────────────────────────────────
-if [[ -z "${S3_BUCKET:-}" ]]; then
-	echo "Error: S3_BUCKET environment variable not set." >&2
+if [[ -z "${CF_DOMAIN:-}" ]]; then
+	echo "Error: CF_DOMAIN environment variable not set." >&2
 	exit 1
 fi
 
-if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
-	echo "Error: AWS credentials not set (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)." >&2
+if [[ -z "${CF_KEY_PAIR_ID:-}" ]]; then
+	echo "Error: CF_KEY_PAIR_ID environment variable not set." >&2
 	exit 1
 fi
 
-# ── Validate key ──────────────────────────────────────────────────────────────
-if [[ -z "$KEY" ]]; then
-	echo "Error: No S3 key provided." >&2
-	echo "Usage: s3-sign [--expires N] \"S3_KEY\"" >&2
+if [[ ! -f "$CF_KEY_PATH" ]]; then
+	echo "Error: CloudFront private key not found at ${CF_KEY_PATH}." >&2
+	echo "The key is fetched from Secrets Manager at container startup." >&2
+	echo "Check that CF_PRIVATE_KEY_SECRET is set and AWS credentials have access." >&2
+	exit 1
+fi
+
+# ── Validate resource path ───────────────────────────────────────────────────
+if [[ -z "$RESOURCE_PATH" ]]; then
+	echo "Error: No resource path provided." >&2
+	echo "Usage: cdn-sign [--expires N] \"RESOURCE_PATH\"" >&2
 	exit 1
 fi
 
 # Strip leading slash if present
-KEY="${KEY#/}"
+RESOURCE_PATH="${RESOURCE_PATH#/}"
 
 # ── Validate expiry ──────────────────────────────────────────────────────────
 if ! [[ "$EXPIRES" =~ ^[0-9]+$ ]] || [[ "$EXPIRES" -lt 1 ]]; then
@@ -82,7 +88,16 @@ if [[ "$EXPIRES" -gt "$MAX_EXPIRES" ]]; then
 	EXPIRES=$MAX_EXPIRES
 fi
 
-# ── Generate presigned URL ───────────────────────────────────────────────────
-aws s3 presign "s3://${S3_BUCKET}/${KEY}" \
-	--expires-in "$EXPIRES" \
-	--region "${AWS_REGION:-us-east-1}"
+# ── Compute expiry timestamp ─────────────────────────────────────────────────
+EXPIRY_EPOCH=$(( $(date +%s) + EXPIRES ))
+EXPIRY_DATE=$(date -u -d "@${EXPIRY_EPOCH}" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
+	|| date -u -r "${EXPIRY_EPOCH}" '+%Y-%m-%dT%H:%M:%SZ')
+
+# ── Generate signed URL ─────────────────────────────────────────────────────
+URL="https://${CF_DOMAIN}/${RESOURCE_PATH}"
+
+aws cloudfront sign \
+	--url "$URL" \
+	--key-pair-id "$CF_KEY_PAIR_ID" \
+	--private-key "file://${CF_KEY_PATH}" \
+	--date-less-than "$EXPIRY_DATE"

@@ -29,12 +29,12 @@ Environment variables (required):
   CF_KEY_PAIR_ID      CloudFront key pair ID
 
 The private signing key must exist at /tmp/cf-private-key.pem
-(fetched automatically from Secrets Manager at container startup).
+(decoded from CF_PRIVATE_KEY_B64 at container startup).
 
 Examples:
-  cdn-sign "toolkit/appreciation-toolkit.pdf"
-  cdn-sign --expires 86400 "toolkit/31/learning-staff-languages-of-appreciation.pdf"
-  cdn-sign "research/literature-review-2.0.pdf"
+  cdn-sign "resources/31/appreciation-toolkit.pdf"
+  cdn-sign --expires 86400 "resources/28/planning-to-build-trust-activities-resource.pdf"
+  cdn-sign "resources/72/teacher-voice-toolkit.pdf"
 USAGE
 			exit 0
 			;;

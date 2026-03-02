@@ -116,11 +116,13 @@ cdn-sign [--expires N] "RESOURCE_PATH"
 **Flags:**
 - `--expires N` — URL validity in seconds (default: 3600 = 1 hour, max: 604800 = 7 days)
 
+**CDN path structure:** Toolkit resource PDFs live under `resources/<categoryId>/` in the CDN bucket — NOT `toolkit/`.
+
 **Examples:**
 ```bash
-cdn-sign "toolkit/appreciation-toolkit.pdf"
-cdn-sign --expires 86400 "toolkit/31/learning-staff-languages-of-appreciation.pdf"
-cdn-sign "research/literature-review-2.0.pdf"
+cdn-sign "resources/31/appreciation-toolkit.pdf"
+cdn-sign --expires 86400 "resources/28/planning-to-build-trust-activities-resource.pdf"
+cdn-sign "resources/72/teacher-voice-toolkit.pdf"
 ```
 
 **Output:** A single signed URL on stdout. Embed it directly in responses as a clickable link.

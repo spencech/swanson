@@ -62,8 +62,7 @@ fi
 
 if [[ ! -f "$CF_KEY_PATH" ]]; then
 	echo "Error: CloudFront private key not found at ${CF_KEY_PATH}." >&2
-	echo "The key is fetched from Secrets Manager at container startup." >&2
-	echo "Check that CF_PRIVATE_KEY_SECRET is set and AWS credentials have access." >&2
+	echo "Check that CF_PRIVATE_KEY_B64 is set in the environment." >&2
 	exit 1
 fi
 
@@ -88,16 +87,17 @@ if [[ "$EXPIRES" -gt "$MAX_EXPIRES" ]]; then
 	EXPIRES=$MAX_EXPIRES
 fi
 
-# ── Compute expiry timestamp ─────────────────────────────────────────────────
-EXPIRY_EPOCH=$(( $(date +%s) + EXPIRES ))
-EXPIRY_DATE=$(date -u -d "@${EXPIRY_EPOCH}" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
-	|| date -u -r "${EXPIRY_EPOCH}" '+%Y-%m-%dT%H:%M:%SZ')
-
-# ── Generate signed URL ─────────────────────────────────────────────────────
+# ── Generate CloudFront canned policy signed URL via OpenSSL ─────────────────
 URL="https://${CF_DOMAIN}/${RESOURCE_PATH}"
+EXPIRY_EPOCH=$(( $(date +%s) + EXPIRES ))
 
-aws cloudfront sign \
-	--url "$URL" \
-	--key-pair-id "$CF_KEY_PAIR_ID" \
-	--private-key "file://${CF_KEY_PATH}" \
-	--date-less-than "$EXPIRY_DATE"
+# Canned policy JSON (no whitespace — CloudFront is strict about this)
+POLICY="{\"Statement\":[{\"Resource\":\"${URL}\",\"Condition\":{\"DateLessThan\":{\"AWS:EpochTime\":${EXPIRY_EPOCH}}}}]}"
+
+# Sign the policy with RSA-SHA1, then convert to CloudFront's URL-safe base64
+SIGNATURE=$(echo -n "$POLICY" \
+	| openssl dgst -sha1 -sign "$CF_KEY_PATH" \
+	| openssl base64 -A \
+	| tr '+/=' '-~_')
+
+echo "${URL}?Expires=${EXPIRY_EPOCH}&Signature=${SIGNATURE}&Key-Pair-Id=${CF_KEY_PAIR_ID}"

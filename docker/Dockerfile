@@ -30,7 +30,7 @@ RUN chmod +x /tmp/index-repos.sh && OPENAI_API_KEY=$OPENAI_API_KEY /tmp/index-re
 FROM node:22-bookworm
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y git jq python3 python3-venv default-mysql-client && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y git jq bc python3 python3-venv default-mysql-client && rm -rf /var/lib/apt/lists/*
 
 # Install OpenClaw and Spawnee via npm
 RUN npm install -g openclaw@latest spawnee@latest

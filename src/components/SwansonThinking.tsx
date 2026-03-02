@@ -10,7 +10,7 @@ function pickRandom(exclude: number): number {
 	return next
 }
 
-const ROTATE_INTERVAL = 6000
+const ROTATE_INTERVAL = 12000
 
 export function SwansonThinking() {
 	const [index, setIndex] = useState(() => Math.floor(Math.random() * quotes.length))

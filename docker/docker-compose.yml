@@ -26,6 +26,8 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
       - AWS_REGION=${AWS_REGION:-us-east-1}
+      # S3 CDN (presigned URLs for toolkit resources)
+      - S3_BUCKET=${S3_BUCKET:-}
     volumes:
       - swanson-threads:/workspace/threads
       - swanson-plans:/workspace/plans

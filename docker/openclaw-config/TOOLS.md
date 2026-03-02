@@ -105,6 +105,31 @@ query-athena 'SHOW TABLES'
 
 **Cost awareness:** Athena charges per TB scanned. The stats footer shows data scanned for each query. Prefer filtering with `WHERE` clauses and using `LIMIT` to reduce scan volume.
 
+## S3 CDN (Presigned Download URLs)
+
+Use `s3-sign` to generate temporary presigned download URLs for files in the Upbeat CDN bucket (`upbeat-cdn-production-us-east-1`). Use this when referencing toolkit PDFs so users can download the original document.
+
+```bash
+s3-sign [--expires N] "S3_KEY"
+```
+
+**Flags:**
+- `--expires N` — URL validity in seconds (default: 3600 = 1 hour, max: 604800 = 7 days)
+
+**Examples:**
+```bash
+s3-sign "toolkit/appreciation-toolkit.pdf"
+s3-sign --expires 86400 "toolkit/31/learning-staff-languages-of-appreciation.pdf"
+s3-sign "research/literature-review-2.0.pdf"
+```
+
+**Output:** A single presigned URL on stdout. Embed it directly in responses as a clickable link.
+
+**Notes:**
+- Uses the same AWS credentials as Athena (pre-configured)
+- URLs expire after the specified duration — default 1 hour is suitable for most responses
+- Use longer expiry (`--expires 86400`) if the link will be shared or referenced later
+
 ## Spawnee (Plan Execution)
 
 Use `spawnee` to execute approved plans by orchestrating Cursor Cloud Agents. Spawnee dispatches YAML task templates to cloud agents with dependency resolution, parallel execution, and automatic retries.

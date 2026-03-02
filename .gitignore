@@ -71,3 +71,5 @@ coverage/
 *.local
 .turbo/
 .chunkhound*
+claude-resume.txt
+cursor-resume.txt

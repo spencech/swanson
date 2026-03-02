@@ -696,6 +696,17 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname$1, "../dist/index.html"));
   }
+  mainWindow.webContents.setWindowOpenHandler(({ url: url2 }) => {
+    electron.shell.openExternal(url2);
+    return { action: "deny" };
+  });
+  mainWindow.webContents.on("will-navigate", (event, url2) => {
+    const currentURL = (mainWindow == null ? void 0 : mainWindow.webContents.getURL()) || "";
+    if (new URL(url2).origin !== new URL(currentURL).origin) {
+      event.preventDefault();
+      electron.shell.openExternal(url2);
+    }
+  });
   mainWindow.on("closed", () => {
     mainWindow = null;
   });

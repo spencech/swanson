@@ -40,12 +40,19 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     /root/.local/bin/uv tool install chunkhound
 ENV PATH="/root/.local/bin:/root/.local/share/uv/tools/chunkhound/bin:$PATH"
 
+# Install beads (bd) for graph-based episodic memory
+RUN ARCH=$(dpkg --print-architecture) && \
+    BEADS_VERSION="0.57.0" && \
+    curl -sSL "https://github.com/steveyegge/beads/releases/download/v${BEADS_VERSION}/beads_${BEADS_VERSION}_linux_${ARCH}.tar.gz" | \
+    tar -xz -C /usr/local/bin bd && \
+    chmod +x /usr/local/bin/bd
+
 # Install AWS CLI via pip in isolated venv
 RUN python3 -m venv /opt/awscli && /opt/awscli/bin/pip install awscli && \
     ln -s /opt/awscli/bin/aws /usr/local/bin/aws
 
 # Create workspace directory structure
-RUN mkdir -p /workspace/threads /workspace/plans /workspace/sessions /workspace/repos /workspace/knowledge
+RUN mkdir -p /workspace/threads /workspace/plans /workspace/sessions /workspace/repos
 
 # Copy cloned + indexed repos from build stages
 COPY --from=indexed /repos /workspace/repos
@@ -98,6 +105,6 @@ RUN chmod +x /entrypoint.sh
 EXPOSE 18789
 
 # Volumes for persistent data
-VOLUME ["/workspace/threads", "/workspace/plans", "/workspace/sessions", "/workspace/knowledge"]
+VOLUME ["/workspace/threads", "/workspace/plans", "/workspace/sessions"]
 
 ENTRYPOINT ["/entrypoint.sh"]

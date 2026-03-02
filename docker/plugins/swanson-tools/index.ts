@@ -1,10 +1,38 @@
 import { execFileSync } from "child_process";
-import { existsSync, readdirSync, appendFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 
 const REPOS_DIR = "/workspace/repos";
-const KNOWLEDGE_DIR = "/workspace/knowledge";
-const KNOWLEDGE_FILE = join(KNOWLEDGE_DIR, "KNOWLEDGE.md");
+const MEMORY_DIR = "/workspace/repos/swanson-db";
+
+// ─── Helper: Run beads CLI in the memory directory ──────────────────────────
+
+function runBd(args: string[]): string {
+	try {
+		const result = execFileSync("bd", args, {
+			cwd: MEMORY_DIR,
+			encoding: "utf-8",
+			timeout: 15000,
+			maxBuffer: 1024 * 1024 * 2,
+			env: { ...process.env, BD_ACTOR: "swanson-agent" },
+		});
+		return result.trim();
+	} catch (err: unknown) {
+		const error = err as { stderr?: string; stdout?: string; message?: string };
+		const msg = error.stderr || error.stdout || error.message || "Unknown error";
+		return `bd error: ${msg}`;
+	}
+}
+
+function runBdJson<T>(args: string[]): T | null {
+	const result = runBd([...args, "--json"]);
+	if (result.startsWith("bd error:")) return null;
+	try {
+		return JSON.parse(result) as T;
+	} catch {
+		return null;
+	}
+}
 
 // ─── Helper: Run ChunkHound CLI in a repo directory ────────────────────────────
 
@@ -536,77 +564,642 @@ export default function (api: {
 		},
 	});
 
-	// save_knowledge: Persist durable knowledge to KNOWLEDGE.md
+	// ─── Episodic Memory Tools (beads graph in swanson-db) ──────────────────────
+
+	// remember: Create a new memory node in the graph
 	api.registerTool({
-		name: "save_knowledge",
+		name: "remember",
 		description:
-			"Save a durable piece of knowledge about the Upbeat ecosystem to the persistent knowledge file. Use when a user teaches you a convention, pattern, correction, or architectural fact worth remembering across sessions. Do NOT save session-specific or transient information.",
+			"Store a durable memory in the episodic graph. Use when a user teaches a convention, you discover an architectural pattern, a decision is made with rationale, or you need to correct a prior understanding. Do NOT store session-specific or transient information.",
 		parameters: {
 			type: "object",
 			properties: {
-				entry: {
+				title: {
 					type: "string",
-					description:
-						"The knowledge entry to persist (e.g., 'Every new route requires a CloudFormation update in upbeat-aws-infrastructure')",
+					description: "Short summary of the memory (used as issue title)",
+				},
+				content: {
+					type: "string",
+					description: "Full description of what to remember and why it matters",
 				},
 				category: {
 					type: "string",
-					enum: ["convention", "pattern", "correction", "architecture"],
+					enum: ["observation", "decision", "correction", "convention", "outcome"],
 					description:
-						"Category of knowledge: convention (team/project rules), pattern (code patterns to follow), correction (fix a previous misunderstanding), architecture (system design facts)",
+						"observation: architectural/behavioral fact; decision: choice with rationale; correction: fix a prior misunderstanding; convention: team/project rule; outcome: result of completed work",
+				},
+				importance: {
+					type: "string",
+					enum: ["critical", "high", "normal", "low"],
+					description: "How important this memory is (default: normal)",
+				},
+				domains: {
+					type: "array",
+					items: { type: "string" },
+					description: "Topic tags (e.g., ['authentication', 'angular', 'database'])",
+				},
+				related_to: {
+					type: "array",
+					items: { type: "string" },
+					description: "Beads issue IDs this memory relates to (bidirectional)",
+				},
+				caused_by: {
+					type: "string",
+					description: "Beads issue ID that caused/led to this memory",
+				},
+				supersedes: {
+					type: "string",
+					description: "Beads issue ID this memory replaces (old memory will be closed)",
+				},
+				source: {
+					type: "string",
+					enum: ["user", "agent"],
+					description: "Who contributed this memory (default: agent)",
 				},
 			},
-			required: ["entry", "category"],
+			required: ["title", "content", "category"],
 		},
 		execute: async (_id, params) => {
-			const entry = params.entry as string;
+			const title = params.title as string;
+			const content = params.content as string;
 			const category = params.category as string;
-			const timestamp = new Date().toISOString().split("T")[0];
+			const importance = (params.importance as string) || "normal";
+			const domains = (params.domains as string[]) || [];
+			const relatedTo = (params.related_to as string[]) || [];
+			const causedBy = params.caused_by as string | undefined;
+			const supersedes = params.supersedes as string | undefined;
+			const source = (params.source as string) || "agent";
 
-			const line = `\n### [${category}] — ${timestamp}\n${entry}\n`;
+			// Map category to beads type
+			const typeMap: Record<string, string> = {
+				observation: "task",
+				decision: "decision",
+				correction: "bug",
+				convention: "chore",
+				outcome: "feature",
+			};
+			const beadsType = typeMap[category] || "task";
 
-			try {
-				appendFileSync(KNOWLEDGE_FILE, line, "utf-8");
+			// Map importance to priority
+			const priorityMap: Record<string, string> = {
+				critical: "0",
+				high: "1",
+				normal: "2",
+				low: "3",
+			};
+			const priority = priorityMap[importance] || "2";
 
-				// Git commit the change
-				try {
-					execFileSync("git", ["add", "KNOWLEDGE.md"], {
-						cwd: KNOWLEDGE_DIR,
-						encoding: "utf-8",
-						timeout: 10000,
-					});
-					execFileSync(
-						"git",
-						["commit", "-m", `knowledge: add ${category} entry`],
-						{
-							cwd: KNOWLEDGE_DIR,
-							encoding: "utf-8",
-							timeout: 10000,
+			// Build labels
+			const labels = [`memory:${category}`, `memory:source:${source}`];
+			for (const d of domains) {
+				labels.push(`memory:domain:${d}`);
+			}
+
+			// Build metadata
+			const metadata = JSON.stringify({
+				confidence: importance === "correction" ? "medium" : "high",
+				source,
+				access_count: 0,
+				last_accessed: new Date().toISOString(),
+				decay_score: 0,
+				domain_tags: domains,
+			});
+
+			// Create the beads issue
+			const createArgs = [
+				"create",
+				"--title", title,
+				"--description", content,
+				"--type", beadsType,
+				"--priority", priority,
+				"--labels", labels.join(","),
+				"--metadata", metadata,
+				"--silent",
+			];
+
+			const createResult = runBd(createArgs);
+			if (createResult.startsWith("bd error:")) {
+				return { content: [{ type: "text", text: `Failed to create memory: ${createResult}` }] };
+			}
+
+			// Extract the issue ID from output
+			const idMatch = createResult.match(/(memory-[a-z0-9]+)/i) || createResult.match(/(beads-[a-z0-9]+)/i);
+			const memoryId = idMatch ? idMatch[1] : createResult.trim();
+
+			const edges: string[] = [];
+
+			// Create relationship edges
+			for (const relId of relatedTo) {
+				const relResult = runBd(["relate", memoryId, relId]);
+				if (!relResult.startsWith("bd error:")) edges.push(`relates-to: ${relId}`);
+			}
+
+			if (causedBy) {
+				const depResult = runBd(["dep", "add", memoryId, causedBy, "--type", "caused-by"]);
+				if (!depResult.startsWith("bd error:")) edges.push(`caused-by: ${causedBy}`);
+			}
+
+			if (supersedes) {
+				const supResult = runBd(["supersede", supersedes, "--with", memoryId]);
+				if (!supResult.startsWith("bd error:")) edges.push(`supersedes: ${supersedes}`);
+			}
+
+			// Sync to remote
+			runBd(["sync"]);
+
+			const edgeInfo = edges.length > 0 ? `\nEdges: ${edges.join(", ")}` : "";
+			return {
+				content: [{
+					type: "text",
+					text: `Memory stored: ${memoryId} [${category}/${importance}] "${title}"${edgeInfo}`,
+				}],
+			};
+		},
+	});
+
+	// recall: Search and retrieve memories with graph traversal
+	api.registerTool({
+		name: "recall",
+		description:
+			"Search episodic memory by keyword, domain, or category. Returns matching memories plus related nodes via graph traversal. Use at the start of every session and before answering architecture questions.",
+		parameters: {
+			type: "object",
+			properties: {
+				query: {
+					type: "string",
+					description: "Search keywords to find relevant memories",
+				},
+				domain: {
+					type: "string",
+					description: "Filter by domain tag (e.g., 'authentication', 'database')",
+				},
+				category: {
+					type: "string",
+					enum: ["observation", "decision", "correction", "convention", "outcome"],
+					description: "Filter by memory category",
+				},
+				max_results: {
+					type: "number",
+					description: "Maximum direct matches to return (default: 5, max: 10)",
+				},
+				hops: {
+					type: "number",
+					description: "Graph traversal depth for related memories (default: 1, max: 2)",
+				},
+				include_closed: {
+					type: "boolean",
+					description: "Include superseded/archived memories (default: false)",
+				},
+			},
+			required: ["query"],
+		},
+		execute: async (_id, params) => {
+			const query = params.query as string;
+			const domain = params.domain as string | undefined;
+			const category = params.category as string | undefined;
+			const maxResults = Math.min((params.max_results as number) || 5, 10);
+			const hops = Math.min((params.hops as number) || 1, 2);
+			const includeClosed = (params.include_closed as boolean) || false;
+
+			// Phase 1: Search for entry-point nodes
+			const searchArgs = ["search", query, "--limit", String(maxResults)];
+			if (!includeClosed) searchArgs.push("--status", "open");
+
+			// Add label filters
+			if (domain) searchArgs.push("--label", `memory:domain:${domain}`);
+			if (category) searchArgs.push("--label", `memory:${category}`);
+
+			interface BeadsIssue {
+				id: string;
+				title: string;
+				description?: string;
+				type?: string;
+				status?: string;
+				priority?: number;
+				labels?: string[];
+				metadata?: Record<string, unknown>;
+				created?: string;
+			}
+
+			const directMatches = runBdJson<BeadsIssue[]>(searchArgs) || [];
+
+			if (directMatches.length === 0) {
+				// Fallback: try bd list with label filter
+				const listArgs = ["list", "--status", includeClosed ? "all" : "open"];
+				if (category) listArgs.push("--label", `memory:${category}`);
+				if (domain) listArgs.push("--label", `memory:domain:${domain}`);
+				const listResults = runBdJson<BeadsIssue[]>(listArgs) || [];
+
+				if (listResults.length === 0) {
+					return {
+						content: [{
+							type: "text",
+							text: `No memories found for query: "${query}"`,
+						}],
+					};
+				}
+
+				// Filter by keyword in title/description
+				const filtered = listResults.filter((item) => {
+					const text = `${item.title} ${item.description || ""}`.toLowerCase();
+					return query.toLowerCase().split(/\s+/).some((word) => text.includes(word));
+				}).slice(0, maxResults);
+
+				if (filtered.length === 0) {
+					return {
+						content: [{
+							type: "text",
+							text: `No memories found matching: "${query}"`,
+						}],
+					};
+				}
+
+				// Use filtered results as direct matches
+				directMatches.push(...filtered);
+			}
+
+			// Phase 2: Graph traversal for related nodes
+			const visited = new Set(directMatches.map((m) => m.id));
+			const relatedMemories: BeadsIssue[] = [];
+
+			const traverseNode = (nodeId: string, currentHop: number): void => {
+				if (currentHop > hops) return;
+
+				// Get dependencies in both directions
+				for (const direction of ["down", "up"]) {
+					const depResult = runBdJson<Array<{ id: string }>>([
+						"dep", "list", nodeId, `--direction=${direction}`,
+					]);
+					if (!depResult) continue;
+
+					for (const dep of depResult) {
+						if (visited.has(dep.id)) continue;
+						visited.add(dep.id);
+
+						const detail = runBdJson<BeadsIssue>(["show", dep.id]);
+						if (detail) {
+							relatedMemories.push(detail);
+							if (currentHop + 1 <= hops) {
+								traverseNode(dep.id, currentHop + 1);
+							}
 						}
-					);
-				} catch {
-					// Git commit may fail if no changes or not a repo — that's ok
+					}
+				}
+			};
+
+			for (const match of directMatches) {
+				traverseNode(match.id, 1);
+			}
+
+			// Phase 3: Format results
+			const lines: string[] = [];
+
+			lines.push(`## Memory Recall: "${query}"`);
+			lines.push(`Found ${directMatches.length} direct match(es), ${relatedMemories.length} related.\n`);
+
+			for (const m of directMatches) {
+				const labels = (m.labels || []).filter((l) => l.startsWith("memory:")).join(", ");
+				lines.push(`### [MATCH] ${m.id}: ${m.title}`);
+				lines.push(`- **Type**: ${m.type || "unknown"} | **Priority**: P${m.priority ?? "?"} | **Status**: ${m.status || "unknown"}`);
+				if (labels) lines.push(`- **Labels**: ${labels}`);
+				if (m.description) lines.push(`- **Content**: ${m.description}`);
+				if (m.created) lines.push(`- **Created**: ${m.created}`);
+				lines.push("");
+			}
+
+			for (const m of relatedMemories) {
+				lines.push(`### [RELATED] ${m.id}: ${m.title}`);
+				lines.push(`- **Type**: ${m.type || "unknown"} | **Priority**: P${m.priority ?? "?"}`);
+				if (m.description) lines.push(`- **Content**: ${m.description}`);
+				lines.push("");
+			}
+
+			return {
+				content: [{ type: "text", text: lines.join("\n") }],
+			};
+		},
+	});
+
+	// relate: Create an edge between two memory nodes
+	api.registerTool({
+		name: "relate",
+		description:
+			"Create a relationship edge between two memory nodes. Use to connect related concepts, causes, or superseding corrections.",
+		parameters: {
+			type: "object",
+			properties: {
+				from_id: {
+					type: "string",
+					description: "Source memory node ID",
+				},
+				to_id: {
+					type: "string",
+					description: "Target memory node ID",
+				},
+				relationship: {
+					type: "string",
+					enum: ["caused-by", "relates-to", "discovered-from", "supersedes", "validates", "tracks"],
+					description:
+						"Edge type: caused-by (X because of Y), relates-to (bidirectional association), discovered-from (found while investigating Y), supersedes (X replaces Y), validates (X confirms Y), tracks (X monitors Y)",
+				},
+			},
+			required: ["from_id", "to_id", "relationship"],
+		},
+		execute: async (_id, params) => {
+			const fromId = params.from_id as string;
+			const toId = params.to_id as string;
+			const relationship = params.relationship as string;
+
+			let result: string;
+
+			switch (relationship) {
+				case "relates-to":
+					result = runBd(["relate", fromId, toId]);
+					break;
+				case "supersedes":
+					result = runBd(["supersede", toId, "--with", fromId]);
+					break;
+				default:
+					result = runBd(["dep", "add", fromId, toId, "--type", relationship]);
+					break;
+			}
+
+			if (result.startsWith("bd error:")) {
+				return { content: [{ type: "text", text: `Failed to create edge: ${result}` }] };
+			}
+
+			runBd(["sync"]);
+
+			return {
+				content: [{
+					type: "text",
+					text: `Edge created: ${fromId} --[${relationship}]--> ${toId}`,
+				}],
+			};
+		},
+	});
+
+	// forget: Archive/close a memory node
+	api.registerTool({
+		name: "forget",
+		description:
+			"Archive a memory by closing it. Use when a memory is outdated, incorrect, or superseded. Prefer using 'supersedes' on a new memory over standalone forget.",
+		parameters: {
+			type: "object",
+			properties: {
+				memory_id: {
+					type: "string",
+					description: "ID of the memory to archive",
+				},
+				reason: {
+					type: "string",
+					description: "Why this memory is being archived",
+				},
+				replaced_by: {
+					type: "string",
+					description: "ID of the memory that replaces this one (optional)",
+				},
+			},
+			required: ["memory_id", "reason"],
+		},
+		execute: async (_id, params) => {
+			const memoryId = params.memory_id as string;
+			const reason = params.reason as string;
+			const replacedBy = params.replaced_by as string | undefined;
+
+			// Add archival comment
+			runBd(["comment", memoryId, `Archived: ${reason}`]);
+
+			// Create supersede edge if replacement provided
+			if (replacedBy) {
+				runBd(["supersede", memoryId, "--with", replacedBy]);
+			}
+
+			// Close the memory
+			const closeResult = runBd(["close", memoryId, "--reason", reason]);
+			if (closeResult.startsWith("bd error:")) {
+				return { content: [{ type: "text", text: `Failed to archive memory: ${closeResult}` }] };
+			}
+
+			runBd(["sync"]);
+
+			return {
+				content: [{
+					type: "text",
+					text: `Memory archived: ${memoryId}${replacedBy ? ` (replaced by ${replacedBy})` : ""} — ${reason}`,
+				}],
+			};
+		},
+	});
+
+	// consolidate: Review, prune, and report on memory health
+	api.registerTool({
+		name: "consolidate",
+		description:
+			"Review and maintain the memory graph. Use periodically to prune stale memories, get stats, or review candidates for archival.",
+		parameters: {
+			type: "object",
+			properties: {
+				action: {
+					type: "string",
+					enum: ["review", "prune-stale", "stats"],
+					description:
+						"review: show stale/low-priority candidates for archival; prune-stale: auto-close stale P3+ memories; stats: memory graph statistics",
+				},
+				days_stale: {
+					type: "number",
+					description: "Number of days without activity to consider stale (default: 30)",
+				},
+			},
+			required: ["action"],
+		},
+		execute: async (_id, params) => {
+			const action = params.action as string;
+			const daysStale = (params.days_stale as number) || 30;
+
+			if (action === "stats") {
+				const openCount = runBd(["count", "--status", "open"]);
+				const closedCount = runBd(["count", "--status", "closed"]);
+				const lastConsolidation = runBd(["kv", "get", "memory.last_consolidation"]);
+				const version = runBd(["kv", "get", "memory.version"]);
+
+				// Category breakdown
+				const categories = ["observation", "decision", "correction", "convention", "outcome"];
+				const breakdown: string[] = [];
+				for (const cat of categories) {
+					const count = runBd(["count", "--label", `memory:${cat}`, "--status", "open"]);
+					breakdown.push(`  ${cat}: ${count}`);
 				}
 
 				return {
-					content: [
-						{
-							type: "text",
-							text: `Knowledge saved (${category}): ${entry.substring(0, 80)}${entry.length > 80 ? "..." : ""}`,
-						},
-					],
-				};
-			} catch (err: unknown) {
-				const error = err as { message?: string };
-				return {
-					content: [
-						{
-							type: "text",
-							text: `Failed to save knowledge: ${error.message || "Unknown error"}`,
-						},
-					],
+					content: [{
+						type: "text",
+						text: [
+							"## Memory Graph Stats",
+							`- **Version**: ${version}`,
+							`- **Open memories**: ${openCount}`,
+							`- **Closed memories**: ${closedCount}`,
+							`- **Last consolidation**: ${lastConsolidation}`,
+							"- **By category**:",
+							...breakdown,
+						].join("\n"),
+					}],
 				};
 			}
+
+			if (action === "review") {
+				const staleResult = runBd(["stale", "--days", String(daysStale)]);
+				const lowPriority = runBd(["query", "status=open AND priority>=3"]);
+
+				return {
+					content: [{
+						type: "text",
+						text: [
+							`## Memory Review (stale > ${daysStale} days)`,
+							"### Stale Memories",
+							staleResult || "None",
+							"### Low Priority (P3+)",
+							lowPriority || "None",
+							"",
+							"Use `forget` to archive any that are no longer relevant.",
+						].join("\n"),
+					}],
+				};
+			}
+
+			if (action === "prune-stale") {
+				interface StaleIssue {
+					id: string;
+					title: string;
+					priority?: number;
+				}
+
+				const staleItems = runBdJson<StaleIssue[]>(["stale", "--days", String(daysStale)]) || [];
+				const pruned: string[] = [];
+
+				for (const item of staleItems) {
+					if ((item.priority ?? 2) >= 3) {
+						runBd(["close", item.id, "--reason", `Auto-pruned: stale ${daysStale}+ days, priority P${item.priority}`]);
+						pruned.push(`${item.id}: ${item.title}`);
+					}
+				}
+
+				// Update consolidation timestamp
+				runBd(["kv", "set", "memory.last_consolidation", new Date().toISOString()]);
+				runBd(["sync"]);
+
+				return {
+					content: [{
+						type: "text",
+						text: pruned.length > 0
+							? `Pruned ${pruned.length} stale P3+ memories:\n${pruned.map((p) => `- ${p}`).join("\n")}`
+							: `No stale P3+ memories found (checked ${staleItems.length} stale items).`,
+					}],
+				};
+			}
+
+			return {
+				content: [{ type: "text", text: `Unknown action: ${action}` }],
+			};
+		},
+	});
+
+	// migrate_knowledge: Import entries from legacy KNOWLEDGE.md
+	api.registerTool({
+		name: "migrate_knowledge",
+		description:
+			"Import entries from the legacy KNOWLEDGE.md file into the beads memory graph. Use once to migrate existing knowledge.",
+		parameters: {
+			type: "object",
+			properties: {
+				dry_run: {
+					type: "boolean",
+					description: "If true, show what would be imported without creating memories (default: false)",
+				},
+			},
+		},
+		execute: async (_id, params) => {
+			const dryRun = (params.dry_run as boolean) || false;
+			const knowledgeFile = join(MEMORY_DIR, "KNOWLEDGE.md");
+
+			if (!existsSync(knowledgeFile)) {
+				return {
+					content: [{
+						type: "text",
+						text: "No KNOWLEDGE.md found in swanson-db. Nothing to migrate.",
+					}],
+				};
+			}
+
+			const content = readFileSync(knowledgeFile, "utf-8");
+			const entryPattern = /### \[(\w+)\] — (\d{4}-\d{2}-\d{2})\n([\s\S]*?)(?=\n### |\n## |$)/g;
+			const entries: Array<{ category: string; date: string; text: string }> = [];
+			let match: RegExpExecArray | null;
+
+			while ((match = entryPattern.exec(content)) !== null) {
+				entries.push({
+					category: match[1].toLowerCase(),
+					date: match[2],
+					text: match[3].trim(),
+				});
+			}
+
+			if (entries.length === 0) {
+				return {
+					content: [{
+						type: "text",
+						text: "No parseable entries found in KNOWLEDGE.md.",
+					}],
+				};
+			}
+
+			if (dryRun) {
+				const preview = entries.map((e, i) =>
+					`${i + 1}. [${e.category}] (${e.date}) ${e.text.substring(0, 80)}...`
+				).join("\n");
+				return {
+					content: [{
+						type: "text",
+						text: `Would migrate ${entries.length} entries:\n${preview}`,
+					}],
+				};
+			}
+
+			const results: string[] = [];
+			const categoryMap: Record<string, string> = {
+				convention: "chore",
+				pattern: "task",
+				correction: "bug",
+				architecture: "task",
+			};
+
+			for (const entry of entries) {
+				const beadsType = categoryMap[entry.category] || "task";
+				const createResult = runBd([
+					"create",
+					"--title", entry.text.substring(0, 100),
+					"--description", entry.text,
+					"--type", beadsType,
+					"--priority", "2",
+					"--labels", `memory:${entry.category},memory:source:migration`,
+					"--silent",
+				]);
+
+				if (!createResult.startsWith("bd error:")) {
+					results.push(`Migrated: [${entry.category}] ${entry.text.substring(0, 60)}...`);
+				} else {
+					results.push(`Failed: [${entry.category}] ${createResult}`);
+				}
+			}
+
+			runBd(["sync"]);
+
+			return {
+				content: [{
+					type: "text",
+					text: `Migration complete: ${results.length}/${entries.length} entries processed.\n${results.join("\n")}`,
+				}],
+			};
 		},
 	});
 }

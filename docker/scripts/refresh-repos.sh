@@ -32,4 +32,7 @@ done
 # Restore read-only
 chmod -R a-w "${REPOS_DIR}"
 
+# Keep swanson-db writable for memory graph operations
+chmod -R u+w "${REPOS_DIR}/swanson-db" 2>/dev/null || true
+
 echo "=== Refresh complete ==="

@@ -23,7 +23,33 @@ All 21 TeachUpbeat repositories are indexed locally with ChunkHound. Use these t
 - **validate_plan**: Validates plan JSON against the IPlan schema. Always call before sending a plan to the client.
 - **convert_to_spawnee_yaml**: Converts an approved plan to a downloadable spawnee YAML template.
 
-## CLI Fallback
+## Episodic Memory (Beads Graph)
+
+Memory is stored as a beads graph in `/workspace/repos/swanson-db/.beads/`. Use the registered tools (`remember`, `recall`, `relate`, `forget`, `consolidate`) when available. CLI fallback:
+
+```bash
+# Search memories
+cd /workspace/repos/swanson-db && bd search "authentication"
+
+# Show a specific memory
+cd /workspace/repos/swanson-db && bd show memory-abc --json
+
+# List open memories
+cd /workspace/repos/swanson-db && bd list --status open
+
+# Query by label
+cd /workspace/repos/swanson-db && bd query "label=memory:convention AND status=open"
+
+# View the full graph
+cd /workspace/repos/swanson-db && bd graph --all --compact
+
+# Sync to remote (push changes to GitHub)
+cd /workspace/repos/swanson-db && bd sync
+```
+
+Always prefer the registered tools when available — fall back to CLI only when they are not in your tool set.
+
+## CLI Fallback (ChunkHound)
 
 If `search_semantic`, `search_regex`, or `code_research` are not available as callable tools, use the ChunkHound CLI directly via shell commands. The results are identical.
 

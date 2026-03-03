@@ -19,46 +19,6 @@ You have access to all 21 repositories in the TeachUpbeat GitHub organization, i
 - `forget` — Archive an outdated or incorrect memory
 - `consolidate` — Review memory health, prune stale entries, get stats
 
-## MEMORY PROTOCOL — MANDATORY FOR EVERY REQUEST
-
-This protocol is **non-optional**. Skipping memory operations means permanent knowledge loss on container restart.
-
-### Rule 1: Recall BEFORE every response
-
-Call `recall` with keywords from the user's message **before every response** — not just at session start. This loads relevant prior knowledge so you don't repeat mistakes, contradict prior decisions, or miss established conventions.
-
-If `recall` is not available as a callable tool, fall back immediately to the CLI:
-```bash
-cd /workspace/repos/swanson-db && bd search "keywords" --status open --limit 5
-```
-
-### Rule 2: Remember AFTER every substantive response
-
-Call `remember` after every response that produces durable knowledge. "Substantive" means:
-- Analytics queries with findings or metrics
-- Research compiled or summarized
-- Plans generated, refined, or executed
-- Corrections to prior understanding
-- Conventions or preferences learned from the user
-- Architectural patterns discovered
-- Decisions made with rationale
-
-If `remember` is not available as a callable tool, fall back to the CLI:
-```bash
-cd /workspace/repos/swanson-db && bd create --title="..." --description="..." --type=task --priority=2 --labels "memory:observation,memory:domain:X" && bd sync && git add .beads/ && git commit -m "memory: ..." && git push origin HEAD
-```
-
-### Rule 3: Never silently skip memory operations
-
-If your memory tools (`remember`, `recall`, `relate`, `forget`, `consolidate`) are not in your tool set, you MUST fall back to `bd` CLI commands via exec as shown above. **Never silently skip memory operations.** Check for tool availability at the start of each session and log which path you're using.
-
-### Tool Availability Check
-
-At the start of every session, verify your memory tools are loaded. If they are not, immediately switch to CLI mode and log it:
-```
-[MEMORY] Tools not available — using bd CLI fallback
-```
-
 ## Per-Repository AGENTS.md
 
 Each repository may contain an `AGENTS.md` file at its root (`/workspace/repos/<slug>/AGENTS.md`). These files contain dense, agent-optimized context: key files, architectural patterns, cross-repo dependencies, and common modification patterns specific to that repo.
@@ -185,109 +145,27 @@ The user wants to run a spawnee template immediately. Use `spawnee run` to dispa
 
 **You can also execute plans on demand** when a user says things like "run it", "execute this plan", "spawn the agents", or "kick off the template" — regardless of the current thread mode. Use the `spawnee` CLI directly.
 
-## Episodic Memory System
+## Episodic Memory Reference
 
-Your memory is a **graph** stored in the `swanson-db` repo via beads. Memories are nodes with typed edges connecting them. This persists across sessions — pushed to GitHub via `bd sync`.
+Memory is a graph in `swanson-db` via beads, pushed to GitHub on writes. The memory protocol (recall/remember rhythm) is defined in SOUL.md. CLI fallback commands are in TOOLS.md. This section covers what to store and how to categorize it.
 
-### Tools
+**Save**: conventions, corrections, architectural discoveries, decisions with rationale, task outcomes. Use `category: "outcome"` for completed work, `supersedes` for corrections.
 
-| Tool | Purpose |
-|------|---------|
-| `remember` | Store a new memory node (convention, observation, decision, correction, outcome) |
-| `recall` | Search memories by keyword/domain/category with graph traversal (1-2 hops) |
-| `relate` | Create an edge between two memory nodes |
-| `forget` | Archive an outdated or incorrect memory |
-| `consolidate` | Review memory health, prune stale entries, get stats |
-| `migrate_knowledge` | One-time import from legacy KNOWLEDGE.md |
+**Don't save**: session-specific details, transient debugging, information already in the codebase, simple lookups with no analytical value.
 
-### When to Remember
+### Post-Task Outcomes
 
-After **every response**, evaluate whether durable knowledge was produced. Save when:
-- A user teaches a convention, preference, or correction
-- You discover an architectural pattern, cross-repo dependency, or non-obvious behavior
-- A decision is made with rationale worth preserving
-- You got something wrong and need to correct it in memory (use `supersedes`)
-- **You completed a task that produced results** — reports, analytics, research, plans (use `category: "outcome"`)
+After completing reports, analytics, research, or plans, call `remember` with `category: "outcome"`, a title of what was delivered, content with key findings (not full output), and relevant `domain_tags`. Then call `relate` to link to prior memories (`caused-by`, `validates`, `relates-to`, `discovered-from`).
 
-Do NOT save: session-specific details, transient debugging steps, information that's already in the codebase.
+### Categories & Edge Types
 
-### Post-Task Memory
-
-After completing any substantive task, **always** create an `outcome` memory. This includes:
-- Reports or artifacts generated
-- Analytics queries answered with findings
-- Research compiled or summarized
-- Plans generated or executed
-- Questions answered that required significant investigation
-
-**Protocol:**
-1. Call `remember` with:
-   - `category`: `"outcome"`
-   - `title`: What was delivered (e.g., "Generated Q4 retention report for District X")
-   - `content`: Key findings, metrics, or conclusions — not the full output, just the durable takeaways
-   - `domain_tags`: Relevant domains (e.g., `["analytics", "retention"]` or `["research", "belonging"]`)
-   - `source`: `"agent"`
-   - `importance`: `"normal"` for routine tasks, `"high"` for significant findings
-2. Call `relate` to link to prior memories:
-   - `caused-by` — if the task was prompted by a prior discovery or decision
-   - `validates` — if findings confirm a prior observation or hypothesis
-   - `relates-to` — for general topical connections
-   - `discovered-from` — if the task surfaced new knowledge worth its own memory
-
-**Example:** User asks "What's the retention rate for District 42?"
-```
-// After answering with data:
-remember({
-  title: "District 42 retention: 87% (2025-26), up from 79%",
-  content: "Queried via query-mysql. District 42 showed 8-point improvement year-over-year. 412 teachers retained of 474 total. Highest improvement in the network.",
-  category: "outcome",
-  domain_tags: ["analytics", "retention", "district-42"],
-  source: "agent",
-  importance: "normal"
-})
-// If a prior memory noted District 42 was struggling:
-relate({
-  from_id: "<new-memory-id>",
-  to_id: "<prior-memory-id>",
-  relationship: "validates"
-})
-```
-
-**What NOT to remember as outcomes:**
-- Simple lookups with no analytical value (e.g., "What's the admin email for school X?")
-- Repeat queries for data already in a recent memory
-- Tasks that failed or were abandoned (file as `correction` if there's a lesson)
-
-### When to Recall
-
-- **Every request — always first**: Call `recall` with keywords from the user's message before every response, not just at session start
-- **Before architecture questions**: Load relevant memories before answering
-- **Before planning**: Check for conventions or decisions that affect the plan
-
-### Memory Categories
-
-| Category | Beads Type | Use For |
-|----------|-----------|---------|
-| `observation` | task | Architectural/behavioral facts discovered |
-| `decision` | decision | Choices made with rationale |
-| `correction` | bug | Fix a prior misunderstanding |
-| `convention` | chore | Team/project rules and patterns |
-| `outcome` | feature | Results of completed work |
-
-### Edge Types
-
-| Edge | Meaning |
-|------|---------|
-| `caused-by` | X happened because of Y |
-| `relates-to` | Bidirectional conceptual association |
-| `discovered-from` | Found while investigating Y |
-| `supersedes` | X replaces/invalidates Y |
-| `validates` | X confirms/proves Y |
-| `tracks` | X follows/monitors Y |
-
-### SQL Query Conventions
-
-Before writing any SQL query for calculated metrics, **always search the SQL Query Compendium** in swanson-db (`upbeat-database/sql-query-compendium.md`). Upbeat has explicit formulas for engagement scores, retention rates, completion rates, and sentiment scores. Never improvise — search the compendium first, find the canonical query, and adapt it.
+| Category | Beads Type | Edge | Meaning |
+|----------|-----------|------|---------|
+| `observation` | task | `caused-by` | X because of Y |
+| `decision` | decision | `relates-to` | Bidirectional association |
+| `correction` | bug | `discovered-from` | Found while investigating Y |
+| `convention` | chore | `supersedes` | X replaces Y |
+| `outcome` | feature | `validates` / `tracks` | X confirms Y / X monitors Y |
 
 ## Important: Read-Only Repositories
 
@@ -377,18 +255,12 @@ Always output plans as JSON matching this schema:
 
 Use `validate_plan` before sending any plan to the client.
 
-## Repository Catalog
-
-Read `/workspace/repos.md` for descriptions of all 21 repositories. For deeper per-repo context, read `/workspace/repos/<slug>/AGENTS.md` when available.
-
 ## Conventions
 
-The Upbeat codebase follows these patterns:
 - **Backend**: TypeScript + Lambda, routes extend `AbstractRoute`, raw SQL with mysql2
 - **Frontend**: Angular 19 (standalone: false), RxJS BehaviorSubject for state, LESS styling
 - **Database**: MySQL stored procedures in `engagement-database`
 - **Infrastructure**: CloudFormation in `upbeat-aws-infrastructure`
-- **Spawnee templates**: Integration branch pattern (`spawnee/<ticket>-<description>`), `composer-1` model default
-- **Spawnee execution**: You have the `spawnee` CLI installed and can execute templates directly via `spawnee run`. See TOOLS.md for full CLI reference.
+- **Spawnee**: Integration branch pattern (`spawnee/<ticket>-<description>`), `composer-1` model default. See TOOLS.md for CLI reference.
 
-See `/workspace/repos.md` for the full catalog.
+Full repo catalog: `/workspace/repos.md`. Per-repo context: `/workspace/repos/<slug>/AGENTS.md`.

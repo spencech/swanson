@@ -23,42 +23,26 @@ All 21 TeachUpbeat repositories are indexed locally with ChunkHound. Use these t
 - **validate_plan**: Validates plan JSON against the IPlan schema. Always call before sending a plan to the client.
 - **convert_to_spawnee_yaml**: Converts an approved plan to a downloadable spawnee YAML template.
 
-## Episodic Memory (Beads Graph)
+## Episodic Memory (Beads Graph — CLI Fallback)
 
-Memory is stored as a beads graph in `/workspace/repos/swanson-db/.beads/`. Use the registered tools (`remember`, `recall`, `relate`, `forget`, `consolidate`) when available.
-
-**MANDATORY CLI FALLBACK:** If `remember`, `recall`, `relate`, `forget`, or `consolidate` are not available as callable tools, you MUST fall back to the `bd` CLI via exec. This is not optional — memory operations must happen on every request regardless of tool availability.
+Memory graph is at `/workspace/repos/swanson-db/.beads/`. When registered tools (`remember`, `recall`, etc.) are unavailable, use these CLI equivalents:
 
 ```bash
-# Recall (BEFORE every response)
-cd /workspace/repos/swanson-db && bd search "keywords from user message" --status open --limit 5
+# Recall
+cd /workspace/repos/swanson-db && bd search "keywords" --status open --limit 5
 
-# Remember (AFTER every substantive response)
+# Remember
 cd /workspace/repos/swanson-db && bd create --title="..." --description="..." --type=task --priority=2 --labels "memory:observation,memory:domain:X"
 
-# Push to GitHub (AFTER every memory write)
+# Push to GitHub (after any memory write)
 cd /workspace/repos/swanson-db && bd sync && git add .beads/ && git commit -m "memory: ..." && git push origin HEAD
 
-# Show a specific memory
-cd /workspace/repos/swanson-db && bd show memory-abc --json
-
-# List open memories
-cd /workspace/repos/swanson-db && bd list --status open
-
-# Query by label
-cd /workspace/repos/swanson-db && bd query "label=memory:convention AND status=open"
-
-# View the full graph
-cd /workspace/repos/swanson-db && bd graph --all --compact
-
-# Create relationship edge
-cd /workspace/repos/swanson-db && bd dep relate <id1> <id2>
-
-# Archive a memory
-cd /workspace/repos/swanson-db && bd close <id> --reason="..."
+# Other operations
+cd /workspace/repos/swanson-db && bd show <id> --json       # Show memory
+cd /workspace/repos/swanson-db && bd list --status open      # List open
+cd /workspace/repos/swanson-db && bd dep relate <id1> <id2>  # Create edge
+cd /workspace/repos/swanson-db && bd close <id> --reason="..." # Archive
 ```
-
-**At session start**, check whether memory tools are in your tool set. If not, log `[MEMORY] Tools not available — using bd CLI fallback` and use the CLI commands above for all memory operations.
 
 ## CLI Fallback (ChunkHound)
 
@@ -264,15 +248,9 @@ Query live with `spawnee models`. Known working models:
 
 Previously generated spawnee templates are in `/workspace/repos/spawnee/`. Check there for examples and existing plans before creating new ones.
 
-## Repository Layout
-
-Repos are at `/workspace/repos/<repo-name>/`. ChunkHound indexes are per-repo in `.chunkhound/` directories.
-
-Per-repo AGENTS.md files (when present) are at `/workspace/repos/<repo-name>/AGENTS.md`. Read these for dense architectural context before planning steps that touch a given repo.
-
 ## Infrastructure
 
+- **Repos**: `/workspace/repos/<name>/` (read-only except swanson-db). Per-repo `AGENTS.md` when available.
 - **Gateway**: OpenClaw on port 18789
 - **Persistence**: `/workspace/threads/`, `/workspace/plans/`
-- **LLM**: Anthropic Claude via API key
 - **Spawnee**: Cursor Cloud Agent orchestration via `CURSOR_API_KEY`

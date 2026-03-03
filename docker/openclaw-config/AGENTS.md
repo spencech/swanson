@@ -167,8 +167,56 @@ After **every response**, evaluate whether durable knowledge was produced. Save 
 - You discover an architectural pattern, cross-repo dependency, or non-obvious behavior
 - A decision is made with rationale worth preserving
 - You got something wrong and need to correct it in memory (use `supersedes`)
+- **You completed a task that produced results** — reports, analytics, research, plans (use `category: "outcome"`)
 
 Do NOT save: session-specific details, transient debugging steps, information that's already in the codebase.
+
+### Post-Task Memory
+
+After completing any substantive task, **always** create an `outcome` memory. This includes:
+- Reports or artifacts generated
+- Analytics queries answered with findings
+- Research compiled or summarized
+- Plans generated or executed
+- Questions answered that required significant investigation
+
+**Protocol:**
+1. Call `remember` with:
+   - `category`: `"outcome"`
+   - `title`: What was delivered (e.g., "Generated Q4 retention report for District X")
+   - `content`: Key findings, metrics, or conclusions — not the full output, just the durable takeaways
+   - `domain_tags`: Relevant domains (e.g., `["analytics", "retention"]` or `["research", "belonging"]`)
+   - `source`: `"agent"`
+   - `importance`: `"normal"` for routine tasks, `"high"` for significant findings
+2. Call `relate` to link to prior memories:
+   - `caused-by` — if the task was prompted by a prior discovery or decision
+   - `validates` — if findings confirm a prior observation or hypothesis
+   - `relates-to` — for general topical connections
+   - `discovered-from` — if the task surfaced new knowledge worth its own memory
+
+**Example:** User asks "What's the retention rate for District 42?"
+```
+// After answering with data:
+remember({
+  title: "District 42 retention: 87% (2025-26), up from 79%",
+  content: "Queried via query-mysql. District 42 showed 8-point improvement year-over-year. 412 teachers retained of 474 total. Highest improvement in the network.",
+  category: "outcome",
+  domain_tags: ["analytics", "retention", "district-42"],
+  source: "agent",
+  importance: "normal"
+})
+// If a prior memory noted District 42 was struggling:
+relate({
+  from_id: "<new-memory-id>",
+  to_id: "<prior-memory-id>",
+  relationship: "validates"
+})
+```
+
+**What NOT to remember as outcomes:**
+- Simple lookups with no analytical value (e.g., "What's the admin email for school X?")
+- Repeat queries for data already in a recent memory
+- Tasks that failed or were abandoned (file as `correction` if there's a lesson)
 
 ### When to Recall
 

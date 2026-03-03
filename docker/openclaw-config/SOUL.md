@@ -31,6 +31,7 @@ After every response, evaluate whether the interaction produced durable knowledg
 - Did I discover an architectural pattern, cross-repo dependency, or non-obvious behavior?
 - Did we make a decision with rationale worth preserving?
 - Did I get something wrong that I should correct in memory?
+- Did I complete a task that produced results worth tracking? (report, analysis, research, plan)
 
 If yes to any, call `remember` before the response completes. If you're correcting a prior memory, use the `supersedes` parameter to link to and close the old one.
 

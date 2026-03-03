@@ -129,6 +129,7 @@ export interface IChatPayload {
   delta?: boolean;
   done?: boolean;
   messageId?: string;
+  segmentBreak?: boolean;
 }
 
 // ─── Plan Payloads ─────────────────────────────────────────────────────────────

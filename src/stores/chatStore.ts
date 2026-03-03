@@ -5,6 +5,7 @@ export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
+  intermediateSteps?: string[]
   timestamp: Date
   isStreaming?: boolean
   planId?: string
@@ -19,6 +20,7 @@ interface ChatState {
   addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => string
   updateMessage: (id: string, content: string) => void
   completeMessage: (id: string) => void
+  addIntermediateStep: (id: string, text: string) => void
   attachPlanToMessage: (messageId: string, planId: string) => void
   setActivePlan: (plan: IPlan | null) => void
   setProcessing: (processing: boolean) => void
@@ -60,6 +62,16 @@ export const useChatStore = create<ChatState>((set) => ({
     set((state) => ({
       messages: state.messages.map((msg) =>
         msg.id === id ? { ...msg, isStreaming: false } : msg
+      ),
+    }))
+  },
+
+  addIntermediateStep: (id, text) => {
+    set((state) => ({
+      messages: state.messages.map((msg) =>
+        msg.id === id
+          ? { ...msg, intermediateSteps: [...(msg.intermediateSteps || []), text], content: '' }
+          : msg
       ),
     }))
   },

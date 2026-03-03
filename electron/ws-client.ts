@@ -245,11 +245,24 @@ function handleAgentEvent(payload: Record<string, unknown>): void {
 		return;
 	}
 
-	// Tool events — forward to renderer as activity indicator
+	// Tool events — send segment break if we have accumulated text, then forward activity
 	if (stream === "tool") {
 		const name = (data?.name as string) || (data?.tool as string) || "unknown";
 		const toolPhase = data?.phase as string | undefined;
 		const isStart = !toolPhase || toolPhase === "start" || toolPhase === "call" || toolPhase === "running";
+
+		// Snapshot accumulated text as an intermediate step before tool starts
+		if (isStart && fullContent.trim() && currentMessageId) {
+			sendToRenderer("chat", {
+				content: fullContent,
+				segmentBreak: true,
+				delta: false,
+				done: false,
+				messageId: currentMessageId,
+			} as IChatPayload);
+			fullContent = "";
+		}
+
 		sendToRenderer("tool_activity", {
 			name,
 			description: name,

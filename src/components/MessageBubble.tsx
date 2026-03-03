@@ -7,6 +7,38 @@ import { usePlanStore } from '../stores/planStore'
 import { PlanCard } from './PlanCard'
 import type { IPlan } from '../../shared/types'
 
+function IntermediateSteps({ steps }: { steps: string[] }) {
+	const [expanded, setExpanded] = useState(false)
+
+	return (
+		<div className="mb-3">
+			<button
+				onClick={() => setExpanded(!expanded)}
+				className="flex items-center gap-1.5 text-xs text-light-text-secondary dark:text-dark-text-secondary hover:text-light-text-primary dark:hover:text-dark-text-primary transition-colors"
+			>
+				<svg
+					className={`w-3 h-3 transition-transform ${expanded ? "rotate-90" : ""}`}
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+				</svg>
+				Swanson worked through {steps.length} step{steps.length > 1 ? "s" : ""}
+			</button>
+			{expanded && (
+				<div className="mt-2 space-y-2 pl-1 border-l-2 border-light-border dark:border-dark-border">
+					{steps.map((step, i) => (
+						<div key={i} className="pl-3 text-xs leading-relaxed text-light-text-secondary dark:text-dark-text-secondary">
+							<ReactMarkdown remarkPlugins={[remarkGfm]}>{step}</ReactMarkdown>
+						</div>
+					))}
+				</div>
+			)}
+		</div>
+	)
+}
+
 const ALLOWED_TAGS = [
 	"h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "span",
 	"table", "thead", "tbody", "tr", "th", "td",
@@ -244,6 +276,9 @@ export function MessageBubble({ message, onEditRequest }: MessageBubbleProps) {
 				) : (
 					<>
 						<CopyButton text={message.content} />
+						{!message.isStreaming && message.intermediateSteps && message.intermediateSteps.length > 0 && (
+							<IntermediateSteps steps={message.intermediateSteps} />
+						)}
 						<div className="prose-swanson text-sm text-light-text-primary dark:text-dark-text-primary">
 							<ReactMarkdown remarkPlugins={[remarkGfm]}>
 								{message.content}

@@ -28,6 +28,7 @@ export function useOpenClaw() {
   const addMessage = useChatStore((state) => state.addMessage)
   const updateMessage = useChatStore((state) => state.updateMessage)
   const completeMessage = useChatStore((state) => state.completeMessage)
+  const addIntermediateStep = useChatStore((state) => state.addIntermediateStep)
   const setProcessing = useChatStore((state) => state.setProcessing)
   const setToolActivity = useChatStore((state) => state.setToolActivity)
   const setCurrentPlan = usePlanStore((state) => state.setCurrentPlan)
@@ -55,6 +56,13 @@ export function useOpenClaw() {
       switch (msg.type) {
         case 'chat': {
           const payload = msg.payload as IChatPayload
+
+          // Segment break — move accumulated text to intermediate steps
+          if (payload.segmentBreak && currentMessageIdRef.current) {
+            addIntermediateStep(currentMessageIdRef.current, accumulatedTextRef.current)
+            accumulatedTextRef.current = ''
+            break
+          }
 
           if (payload.done) {
             // Stream complete
@@ -161,7 +169,7 @@ export function useOpenClaw() {
     })
 
     return cleanup
-  }, [addMessage, updateMessage, completeMessage, setProcessing, setToolActivity, setCurrentPlan, updatePlanStatus])
+  }, [addMessage, updateMessage, completeMessage, addIntermediateStep, setProcessing, setToolActivity, setCurrentPlan, updatePlanStatus])
 
   // Connect to OpenClaw on mount
   useEffect(() => {

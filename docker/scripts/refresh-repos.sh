@@ -10,6 +10,13 @@ chmod -R u+w "${REPOS_DIR}"
 
 for repo_dir in "${REPOS_DIR}"/*/; do
 	repo_name=$(basename "$repo_dir")
+
+	# Skip swanson-db — beads handles its own sync via bd sync
+	if [ "$repo_name" = "swanson-db" ]; then
+		echo "--- ${repo_name} --- (skipped: memory repo, synced by beads)"
+		continue
+	fi
+
 	echo "--- ${repo_name} ---"
 
 	cd "$repo_dir"

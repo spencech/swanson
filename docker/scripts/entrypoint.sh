@@ -88,6 +88,15 @@ fi
 # Use a shared volume path so the lock works across containers
 LOCK_DIR="/workspace/threads/.beads-init-lock"
 LOCK_ACQUIRED=false
+# Clean up stale locks from prior crashed containers (mkdir is atomic, so the
+# lock race is still safe even if all containers clean up simultaneously)
+if [ -d "$LOCK_DIR" ]; then
+  LOCK_AGE=$(( $(date +%s) - $(stat -c %Y "$LOCK_DIR" 2>/dev/null || echo "0") ))
+  if [ "$LOCK_AGE" -gt 30 ]; then
+    echo "=== [LOCK] Removing stale lock (${LOCK_AGE}s old) ==="
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+  fi
+fi
 if mkdir "$LOCK_DIR" 2>/dev/null; then
   LOCK_ACQUIRED=true
   echo "=== [LOCK] Acquired beads init lock ==="
@@ -122,14 +131,14 @@ if [ "$LOCK_ACQUIRED" = true ]; then
   elif [ ! -d "$MEMORY_REPO/.beads/dolt" ]; then
     echo "=== [REIMPORT] Beads directory found but Dolt DB missing — reimporting from JSONL ==="
     if [ -f "$MEMORY_REPO/.beads/issues.jsonl" ]; then
-      bd init --from-jsonl --prefix memory --quiet 2>/dev/null || bd init --prefix memory --quiet
+      bd init --force --from-jsonl --prefix memory --quiet 2>/dev/null || bd init --force --prefix memory --quiet
       git add -A && git commit -q -m "Reimport beads memory graph from JSONL (Dolt DB restored)" 2>/dev/null || true
       git push origin HEAD 2>/dev/null || echo "WARNING: Could not push reimported graph to remote"
       echo "Reimported beads graph from JSONL export"
     else
       echo "WARNING: No JSONL export found either — reinitializing fresh"
       rm -rf "$MEMORY_REPO/.beads"
-      bd init --prefix memory --quiet
+      bd init --force --prefix memory --quiet
       bd kv set "memory.version" "1.0.0"
       bd kv set "memory.initialized" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       bd kv set "memory.last_consolidation" "never"
@@ -140,6 +149,19 @@ if [ "$LOCK_ACQUIRED" = true ]; then
     echo "=== [SYNC] Beads memory graph found with Dolt DB intact ==="
     bd sync 2>/dev/null || true
   fi
+  # Ensure beads runtime files are gitignored (prevents merge conflicts on git pull)
+  cd "$MEMORY_REPO"
+  if ! grep -q "dolt-monitor.pid" .beads/.gitignore 2>/dev/null; then
+    cat >> .beads/.gitignore << 'GITIGNORE'
+dolt-monitor.pid
+dolt-server.activity
+dolt/
+GITIGNORE
+    git add .beads/.gitignore
+    git commit -q -m "Ignore beads runtime files" 2>/dev/null || true
+  fi
+  cd /workspace
+
   # Release lock
   rmdir "$LOCK_DIR" 2>/dev/null || true
   echo "=== [LOCK] Released beads init lock ==="
@@ -190,14 +212,35 @@ for dir in threads plans sessions; do
   fi
 done
 
-# Pull latest code for all repos in the background (non-blocking)
-# Repos are baked into the image at build time — this keeps them current at runtime.
-# Logs go to /workspace/refresh.log so the agent can report on the last refresh.
-echo "=== Triggering background repo refresh ==="
-(
-  refresh-repos 2>&1 | tee /workspace/refresh.log
-  echo "=== Background repo refresh complete ===" >> /workspace/refresh.log
-) &
+# Staggered nightly refresh — each expert refreshes at a different hour to avoid
+# slamming OpenAI's embedding API. Repos are freshly indexed at build time,
+# so this only catches code changes that happen while containers are running.
+REFRESH_HOURS="ron:3 ben:4 leslie:5 tom:6 ann:7 april:8"
+MY_HOUR=""
+for entry in $REFRESH_HOURS; do
+  name="${entry%%:*}"
+  hour="${entry##*:}"
+  if [ "$name" = "${EXPERT_NAME:-ron}" ]; then
+    MY_HOUR="$hour"
+    break
+  fi
+done
+
+if [ -n "$MY_HOUR" ]; then
+  echo "=== Scheduled refresh at $(printf '%02d' "$MY_HOUR"):00 UTC ==="
+  (
+    while true; do
+      CURRENT_HOUR=$(date -u +%H)
+      if [ "$CURRENT_HOUR" = "$(printf '%02d' "$MY_HOUR")" ]; then
+        echo "=== [$(date -u)] Starting scheduled refresh for ${EXPERT_NAME} ==="
+        refresh-repos 2>&1 | tee /workspace/refresh.log
+        echo "=== [$(date -u)] Refresh complete ===" >> /workspace/refresh.log
+        sleep 3600  # sleep 1h to avoid re-triggering in the same hour
+      fi
+      sleep 300  # check every 5 minutes
+    done
+  ) &
+fi
 
 # Start OpenClaw gateway
 echo "=== Launching ${EXPERT_NAME:-swanson} (OpenClaw gateway) on port 18789 ==="

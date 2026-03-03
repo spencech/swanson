@@ -46,6 +46,12 @@ export function useOpenClaw() {
       const msg = raw as IWSMessage
       if (!msg || !msg.type) return
 
+      // Diagnostic: log every message from main process (truncate chat deltas)
+      const logPayload = msg.type === 'chat' && (msg.payload as IChatPayload)?.delta
+        ? { ...msg.payload as IChatPayload, content: ((msg.payload as IChatPayload).content || '').slice(0, 80) }
+        : msg.payload
+      console.log(`[useOpenClaw] message — type=${msg.type}`, logPayload)
+
       switch (msg.type) {
         case 'chat': {
           const payload = msg.payload as IChatPayload

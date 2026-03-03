@@ -202,6 +202,9 @@ function handleAgentEvent(payload: Record<string, unknown>): void {
 	const delta = data?.delta as string | undefined;
 	const phase = data?.phase as string | undefined;
 
+	// Diagnostic: log all agent events to see what streams OpenClaw sends
+	console.log(`[ws-client] agent event — stream=${stream} phase=${phase ?? "—"} delta=${delta ? delta.slice(0, 80) + (delta.length > 80 ? "…" : "") : "—"}`, JSON.stringify(payload).slice(0, 300));
+
 	// Lifecycle events
 	if (stream === "lifecycle") {
 		if (phase === "start") {

@@ -1,0 +1,30 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="228" fill="#1a1a2e"/>
+
+  <!-- Subtle radial glow behind glass -->
+  <radialGradient id="glow" cx="50%" cy="55%" r="35%">
+    <stop offset="0%" stop-color="#d97706" stop-opacity="0.15"/>
+    <stop offset="100%" stop-color="#d97706" stop-opacity="0"/>
+  </radialGradient>
+  <circle cx="512" cy="560" r="360" fill="url(#glow)"/>
+
+  <!-- Handlebar mustache -->
+  <g fill="#f59e0b">
+    <path d="M512 280c-64 0-112 24-144 56-24 24-56 32-96 24-40-8-72-32-88-64-10-19 3-29 16-13 24 29 56 48 96 48 32 0 61-13 83-35C403 271 456 256 512 256s109 15 133 41c22 22 51 35 83 35 40 0 72-19 96-48 13-16 26-6 16 13-16 32-48 56-88 64-40 8-72 0-96-24-32-32-80-56-144-56z"/>
+  </g>
+
+  <!-- Glencairn glass - tulip bowl -->
+  <g fill="#d97706">
+    <path d="M352 480c-8 96 16 192 56 264 32 56 64 80 104 80s72-24 104-80c40-72 64-168 56-264H352z" opacity="0.85"/>
+    <!-- Glass rim highlight -->
+    <ellipse cx="512" cy="480" rx="176" ry="40" opacity="0.95"/>
+    <!-- Stem -->
+    <rect x="480" y="824" width="64" height="64" rx="16"/>
+    <!-- Base -->
+    <ellipse cx="512" cy="920" rx="112" ry="32"/>
+  </g>
+
+  <!-- Glass highlight/shine -->
+  <path d="M400 500c0 0 8 140 40 200" stroke="rgba(255,255,255,0.15)" stroke-width="12" stroke-linecap="round" fill="none"/>
+</svg>

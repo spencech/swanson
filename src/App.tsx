@@ -8,6 +8,7 @@ import { Sidebar } from './components/Sidebar'
 import { Dashboard } from './components/Dashboard'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ConnectionIndicator } from './components/ConnectionIndicator'
+import { SwansonIcon } from './components/SwansonIcon'
 
 type ConnectionState = 'connected' | 'disconnected' | 'reconnecting'
 
@@ -94,6 +95,7 @@ function App() {
 			{/* Title bar / drag region */}
 			<div className="drag-region h-12 flex items-center justify-between px-4 border-b border-light-border dark:border-dark-border">
 				<div className="flex items-center gap-3 pl-16">
+					<SwansonIcon className="w-6 h-6 text-light-accent dark:text-dark-accent" />
 					<span className="font-semibold text-lg">Swanson</span>
 					{appVersion && (
 						<span className="text-xs text-light-text-secondary dark:text-dark-text-secondary">

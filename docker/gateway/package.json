@@ -1,0 +1,23 @@
+{
+	"name": "swanson-gateway",
+	"version": "1.0.0",
+	"description": "Chris Traeger — Gateway classifier and proxy for Swanson multi-expert system",
+	"main": "dist/gateway.js",
+	"scripts": {
+		"build": "tsc",
+		"start": "node dist/gateway.js"
+	},
+	"dependencies": {
+		"ws": "^8.18.0",
+		"@anthropic-ai/sdk": "^0.39.0",
+		"express": "^4.21.0",
+		"uuid": "^11.1.0"
+	},
+	"devDependencies": {
+		"typescript": "^5.7.0",
+		"@types/node": "^22.0.0",
+		"@types/ws": "^8.5.0",
+		"@types/express": "^5.0.0",
+		"@types/uuid": "^10.0.0"
+	}
+}

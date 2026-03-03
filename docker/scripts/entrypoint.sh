@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "=== Starting Swanson (OpenClaw Gateway) ==="
+echo "=== Starting expert: ${EXPERT_NAME:-swanson} (OpenClaw Gateway) ==="
 
 # Ensure OpenClaw config directory exists
 OPENCLAW_HOME="${HOME}/.openclaw"
@@ -26,7 +26,7 @@ cat > "${OPENCLAW_HOME}/openclaw.json" << EOF
   "agents": {
     "defaults": {
       "model": {
-        "primary": "anthropic/claude-sonnet-4-6"
+        "primary": "anthropic/claude-opus-4-6"
       },
       "workspace": "/workspace",
       "repoRoot": "/workspace/repos"
@@ -72,8 +72,8 @@ echo "Dolt version: $(dolt version | head -1)"
 
 # Configure git identity for push operations
 cd "$MEMORY_REPO"
-git config user.email "swanson@teachupbeat.com"
-git config user.name "Swanson Agent"
+git config user.email "${EXPERT_NAME:-swanson}@teachupbeat.com"
+git config user.name "${EXPERT_NAME:-Swanson} Agent"
 
 # Unshallow the clone so bd sync can push (clone-repos uses --depth 1)
 git fetch --unshallow 2>/dev/null || true
@@ -83,38 +83,69 @@ if [ -f "$MEMORY_REPO/.beads/config.json" ]; then
   sed -i 's/"no-db":\s*true/"no-db": false/g' "$MEMORY_REPO/.beads/config.json" 2>/dev/null || true
 fi
 
+# Lockfile guard: when multiple expert containers start simultaneously,
+# only one should initialize beads
+# Use a shared volume path so the lock works across containers
+LOCK_DIR="/workspace/threads/.beads-init-lock"
+LOCK_ACQUIRED=false
+if mkdir "$LOCK_DIR" 2>/dev/null; then
+  LOCK_ACQUIRED=true
+  echo "=== [LOCK] Acquired beads init lock ==="
+else
+  echo "=== [WAIT] Another container is initializing beads — waiting ==="
+  WAIT_COUNT=0
+  while [ -d "$LOCK_DIR" ] && [ $WAIT_COUNT -lt 60 ]; do
+    sleep 1
+    WAIT_COUNT=$((WAIT_COUNT + 1))
+  done
+  if [ -d "$LOCK_DIR" ]; then
+    echo "WARNING: Lock held for 60s — removing stale lock"
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+  fi
+  echo "=== [WAIT] Init lock released, proceeding ==="
+fi
+
 # Three-state beads initialization:
 #   1. Brand new: no .beads/ at all → full init
 #   2. Fresh container (Dolt DB lost): .beads/ exists but no .beads/dolt/ → reimport from JSONL
 #   3. Running container: .beads/ and .beads/dolt/ both exist → sync
-if [ ! -d "$MEMORY_REPO/.beads" ]; then
-  echo "=== [INIT] Initializing beads memory graph in swanson-db ==="
-  bd init --prefix memory --quiet
-  bd kv set "memory.version" "1.0.0"
-  bd kv set "memory.initialized" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  bd kv set "memory.last_consolidation" "never"
-  git add -A && git commit -q -m "Initialize beads memory graph"
-  git push origin HEAD 2>/dev/null || echo "WARNING: Could not push beads init to remote"
-  echo "Beads memory graph initialized in swanson-db"
-elif [ ! -d "$MEMORY_REPO/.beads/dolt" ]; then
-  echo "=== [REIMPORT] Beads directory found but Dolt DB missing — reimporting from JSONL ==="
-  if [ -f "$MEMORY_REPO/.beads/issues.jsonl" ]; then
-    bd init --from-jsonl --prefix memory --quiet 2>/dev/null || bd init --prefix memory --quiet
-    git add -A && git commit -q -m "Reimport beads memory graph from JSONL (Dolt DB restored)" 2>/dev/null || true
-    git push origin HEAD 2>/dev/null || echo "WARNING: Could not push reimported graph to remote"
-    echo "Reimported beads graph from JSONL export"
-  else
-    echo "WARNING: No JSONL export found either — reinitializing fresh"
-    rm -rf "$MEMORY_REPO/.beads"
+if [ "$LOCK_ACQUIRED" = true ]; then
+  if [ ! -d "$MEMORY_REPO/.beads" ]; then
+    echo "=== [INIT] Initializing beads memory graph in swanson-db ==="
     bd init --prefix memory --quiet
     bd kv set "memory.version" "1.0.0"
     bd kv set "memory.initialized" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     bd kv set "memory.last_consolidation" "never"
-    git add -A && git commit -q -m "Reinitialize beads memory graph (Dolt DB lost)"
-    git push origin HEAD 2>/dev/null || echo "WARNING: Could not push beads reinit to remote"
+    git add -A && git commit -q -m "Initialize beads memory graph"
+    git push origin HEAD 2>/dev/null || echo "WARNING: Could not push beads init to remote"
+    echo "Beads memory graph initialized in swanson-db"
+  elif [ ! -d "$MEMORY_REPO/.beads/dolt" ]; then
+    echo "=== [REIMPORT] Beads directory found but Dolt DB missing — reimporting from JSONL ==="
+    if [ -f "$MEMORY_REPO/.beads/issues.jsonl" ]; then
+      bd init --from-jsonl --prefix memory --quiet 2>/dev/null || bd init --prefix memory --quiet
+      git add -A && git commit -q -m "Reimport beads memory graph from JSONL (Dolt DB restored)" 2>/dev/null || true
+      git push origin HEAD 2>/dev/null || echo "WARNING: Could not push reimported graph to remote"
+      echo "Reimported beads graph from JSONL export"
+    else
+      echo "WARNING: No JSONL export found either — reinitializing fresh"
+      rm -rf "$MEMORY_REPO/.beads"
+      bd init --prefix memory --quiet
+      bd kv set "memory.version" "1.0.0"
+      bd kv set "memory.initialized" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      bd kv set "memory.last_consolidation" "never"
+      git add -A && git commit -q -m "Reinitialize beads memory graph (Dolt DB lost)"
+      git push origin HEAD 2>/dev/null || echo "WARNING: Could not push beads reinit to remote"
+    fi
+  else
+    echo "=== [SYNC] Beads memory graph found with Dolt DB intact ==="
+    bd sync 2>/dev/null || true
   fi
+  # Release lock
+  rmdir "$LOCK_DIR" 2>/dev/null || true
+  echo "=== [LOCK] Released beads init lock ==="
 else
-  echo "=== [SYNC] Beads memory graph found with Dolt DB intact ==="
+  echo "=== [SKIP] Beads initialization handled by another container ==="
+  # Still sync to get latest state
   bd sync 2>/dev/null || true
 fi
 
@@ -169,5 +200,5 @@ echo "=== Triggering background repo refresh ==="
 ) &
 
 # Start OpenClaw gateway
-echo "=== Launching OpenClaw gateway on port 18789 ==="
+echo "=== Launching ${EXPERT_NAME:-swanson} (OpenClaw gateway) on port 18789 ==="
 exec openclaw gateway --port 18789 --verbose

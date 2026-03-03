@@ -1,48 +1,163 @@
+# Multi-expert Swanson architecture: 1 gateway (chris) + 6 experts
+# All experts run OpenClaw on internal port 18789, accessed via Docker DNS.
+# The gateway proxies client connections on host port 18790.
+
+x-shared-env: &shared-env
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+  OPENAI_API_KEY: ${OPENAI_API_KEY}
+  CHUNKHOUND_EMBEDDING_API_KEY: ${OPENAI_API_KEY}
+  OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_INTERNAL_TOKEN:-expert-internal-token}
+  CURSOR_API_KEY: ${CURSOR_API_KEY:-}
+  MYSQL_HOST: ${MYSQL_HOST:-}
+  MYSQL_PORT: ${MYSQL_PORT:-3306}
+  MYSQL_USER: ${MYSQL_USER:-}
+  MYSQL_PASSWORD: ${MYSQL_PASSWORD:-}
+  MYSQL_DATABASE: ${MYSQL_DATABASE:-}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+  AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+  CF_DOMAIN: ${CF_DOMAIN:-}
+  CF_KEY_PAIR_ID: ${CF_KEY_PAIR_ID:-}
+  CF_PRIVATE_KEY_B64: ${CF_PRIVATE_KEY_B64:-}
+  GATEWAY_HOST: chris
+  GATEWAY_PORT: "18790"
+
+x-expert-base: &expert-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      GITHUB_PAT: ${GITHUB_PAT}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+  restart: unless-stopped
+  volumes:
+    - ./openclaw-config/shared/TOOLS.md:/workspace/TOOLS.md:ro
+    - swanson-threads:/workspace/threads
+    - swanson-plans:/workspace/plans
+    - swanson-sessions:/workspace/sessions
+  healthcheck:
+    test: ["CMD-SHELL", "curl -sf http://localhost:18789/v1/models -H 'Authorization: Bearer ${OPENCLAW_INTERNAL_TOKEN:-expert-internal-token}'"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 45s
+
 services:
-  swanson:
+  # ─── Gateway (Chris Traeger) ──────────────────────────────────────────────
+  chris:
     build:
-      context: .
+      context: ./gateway
       dockerfile: Dockerfile
-      args:
-        GITHUB_PAT: ${GITHUB_PAT}
-        OPENAI_API_KEY: ${OPENAI_API_KEY}
     ports:
-      - "18790:18789"
+      - "18790:18790"
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - CHUNKHOUND_EMBEDDING_API_KEY=${OPENAI_API_KEY}
-      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-swanson-dev-token}
-      # Spawnee (Cursor Cloud Agent orchestration)
-      - CURSOR_API_KEY=${CURSOR_API_KEY:-}
-      # MySQL (read-only RDS access)
-      - MYSQL_HOST=${MYSQL_HOST:-}
-      - MYSQL_PORT=${MYSQL_PORT:-3306}
-      - MYSQL_USER=${MYSQL_USER:-}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-}
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-}
-      # Athena (analytics access)
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
-      # CloudFront CDN (signed URLs for toolkit resources)
-      - CF_DOMAIN=${CF_DOMAIN:-}
-      - CF_KEY_PAIR_ID=${CF_KEY_PAIR_ID:-}
-      - CF_PRIVATE_KEY_B64=${CF_PRIVATE_KEY_B64:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENCLAW_CLIENT_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-swanson-dev-token}
+      OPENCLAW_INTERNAL_TOKEN: ${OPENCLAW_INTERNAL_TOKEN:-expert-internal-token}
     volumes:
+      - swanson-logs:/workspace/logs
+    restart: unless-stopped
+    depends_on:
+      ron:
+        condition: service_healthy
+      ben:
+        condition: service_healthy
+      leslie:
+        condition: service_healthy
+      tom:
+        condition: service_healthy
+      ann:
+        condition: service_healthy
+      april:
+        condition: service_healthy
+
+  # ─── Ron Swanson (Code & Product) ─────────────────────────────────────────
+  ron:
+    <<: *expert-base
+    environment:
+      <<: *shared-env
+      EXPERT_NAME: ron
+    volumes:
+      - ./openclaw-config/experts/ron/AGENTS.md:/workspace/AGENTS.md:ro
+      - ./openclaw-config/experts/ron/SOUL.md:/workspace/SOUL.md:ro
+      - ./openclaw-config/shared/TOOLS.md:/workspace/TOOLS.md:ro
       - swanson-threads:/workspace/threads
       - swanson-plans:/workspace/plans
       - swanson-sessions:/workspace/sessions
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:18789/v1/models", "-H", "Authorization: Bearer ${OPENCLAW_GATEWAY_TOKEN:-swanson-dev-token}"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+
+  # ─── Ben Wyatt (Data & Reports) ──────────────────────────────────────────
+  ben:
+    <<: *expert-base
+    environment:
+      <<: *shared-env
+      EXPERT_NAME: ben
+    volumes:
+      - ./openclaw-config/experts/ben/AGENTS.md:/workspace/AGENTS.md:ro
+      - ./openclaw-config/experts/ben/SOUL.md:/workspace/SOUL.md:ro
+      - ./openclaw-config/shared/TOOLS.md:/workspace/TOOLS.md:ro
+      - swanson-threads:/workspace/threads
+      - swanson-plans:/workspace/plans
+      - swanson-sessions:/workspace/sessions
+
+  # ─── Leslie Knope (Research & Coaching) ───────────────────────────────────
+  leslie:
+    <<: *expert-base
+    environment:
+      <<: *shared-env
+      EXPERT_NAME: leslie
+    volumes:
+      - ./openclaw-config/experts/leslie/AGENTS.md:/workspace/AGENTS.md:ro
+      - ./openclaw-config/experts/leslie/SOUL.md:/workspace/SOUL.md:ro
+      - ./openclaw-config/shared/TOOLS.md:/workspace/TOOLS.md:ro
+      - swanson-threads:/workspace/threads
+      - swanson-plans:/workspace/plans
+      - swanson-sessions:/workspace/sessions
+
+  # ─── Tom Haverford (Sales & Marketing) ────────────────────────────────────
+  tom:
+    <<: *expert-base
+    environment:
+      <<: *shared-env
+      EXPERT_NAME: tom
+    volumes:
+      - ./openclaw-config/experts/tom/AGENTS.md:/workspace/AGENTS.md:ro
+      - ./openclaw-config/experts/tom/SOUL.md:/workspace/SOUL.md:ro
+      - ./openclaw-config/shared/TOOLS.md:/workspace/TOOLS.md:ro
+      - swanson-threads:/workspace/threads
+      - swanson-plans:/workspace/plans
+      - swanson-sessions:/workspace/sessions
+
+  # ─── Ann Perkins (Business Intelligence) ──────────────────────────────────
+  ann:
+    <<: *expert-base
+    environment:
+      <<: *shared-env
+      EXPERT_NAME: ann
+    volumes:
+      - ./openclaw-config/experts/ann/AGENTS.md:/workspace/AGENTS.md:ro
+      - ./openclaw-config/experts/ann/SOUL.md:/workspace/SOUL.md:ro
+      - ./openclaw-config/shared/TOOLS.md:/workspace/TOOLS.md:ro
+      - swanson-threads:/workspace/threads
+      - swanson-plans:/workspace/plans
+      - swanson-sessions:/workspace/sessions
+
+  # ─── April Ludgate (Operations) ──────────────────────────────────────────
+  april:
+    <<: *expert-base
+    environment:
+      <<: *shared-env
+      EXPERT_NAME: april
+    volumes:
+      - ./openclaw-config/experts/april/AGENTS.md:/workspace/AGENTS.md:ro
+      - ./openclaw-config/experts/april/SOUL.md:/workspace/SOUL.md:ro
+      - ./openclaw-config/shared/TOOLS.md:/workspace/TOOLS.md:ro
+      - swanson-threads:/workspace/threads
+      - swanson-plans:/workspace/plans
+      - swanson-sessions:/workspace/sessions
 
 volumes:
   swanson-threads:
   swanson-plans:
   swanson-sessions:
+  swanson-logs:

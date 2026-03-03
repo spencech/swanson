@@ -1,6 +1,7 @@
 import { execFileSync } from "child_process";
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
+import http from "http";
 
 const REPOS_DIR = "/workspace/repos";
 const MEMORY_DIR = "/workspace/repos/swanson-db";
@@ -14,7 +15,7 @@ function runBd(args: string[]): string {
 			encoding: "utf-8",
 			timeout: 15000,
 			maxBuffer: 1024 * 1024 * 2,
-			env: { ...process.env, BD_ACTOR: "swanson-agent" },
+			env: { ...process.env, BD_ACTOR: process.env.EXPERT_NAME ? `${process.env.EXPERT_NAME}-agent` : "swanson-agent" },
 		});
 		return result.trim();
 	} catch (err: unknown) {
@@ -31,6 +32,7 @@ function runBd(args: string[]): string {
 }
 
 function pushMemoryToGitHub(message: string): string {
+	const MAX_RETRIES = 3;
 	try {
 		// Step 1: bd sync (Dolt → JSONL export)
 		const syncResult = runBd(["sync"]);
@@ -38,34 +40,115 @@ function pushMemoryToGitHub(message: string): string {
 			return `push warning: bd sync failed — ${syncResult}`;
 		}
 
-		// Step 2: Stage beads files
-		execFileSync("git", ["add", ".beads/"], {
-			cwd: MEMORY_DIR,
-			encoding: "utf-8",
-			timeout: 10000,
-		});
+		for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+			try {
+				// Step 2: Pull latest from other experts
+				execFileSync("git", ["pull", "--rebase", "origin", "HEAD"], {
+					cwd: MEMORY_DIR,
+					encoding: "utf-8",
+					timeout: 15000,
+				});
 
-		// Step 3: Commit with descriptive message
-		execFileSync("git", ["commit", "-m", `memory: ${message}`, "--allow-empty"], {
-			cwd: MEMORY_DIR,
-			encoding: "utf-8",
-			timeout: 10000,
-		});
+				// Step 3: Stage beads files
+				execFileSync("git", ["add", ".beads/"], {
+					cwd: MEMORY_DIR,
+					encoding: "utf-8",
+					timeout: 10000,
+				});
 
-		// Step 4: Push to origin
-		execFileSync("git", ["push", "origin", "HEAD"], {
-			cwd: MEMORY_DIR,
-			encoding: "utf-8",
-			timeout: 30000,
-		});
+				// Step 4: Commit with descriptive message
+				execFileSync("git", ["commit", "-m", `memory: ${message}`, "--allow-empty"], {
+					cwd: MEMORY_DIR,
+					encoding: "utf-8",
+					timeout: 10000,
+				});
 
-		return "pushed";
+				// Step 5: Push to origin
+				execFileSync("git", ["push", "origin", "HEAD"], {
+					cwd: MEMORY_DIR,
+					encoding: "utf-8",
+					timeout: 30000,
+				});
+
+				return "pushed";
+			} catch (err: unknown) {
+				const error = err as { stderr?: string; message?: string };
+				const msg = error.stderr || error.message || "Unknown error";
+
+				if (attempt < MAX_RETRIES && (msg.includes("conflict") || msg.includes("rejected") || msg.includes("non-fast-forward"))) {
+					// Retry: pull --rebase again and try push
+					console.error(`[memory] Push attempt ${attempt} failed (${msg.substring(0, 80)}), retrying...`);
+					try {
+						execFileSync("git", ["rebase", "--abort"], {
+							cwd: MEMORY_DIR,
+							encoding: "utf-8",
+							timeout: 5000,
+						});
+					} catch {
+						// No rebase in progress, that's fine
+					}
+					continue;
+				}
+
+				// Non-fatal: memory is still local even if push fails
+				return `push warning: ${msg}`;
+			}
+		}
+
+		return "push warning: max retries exceeded";
 	} catch (err: unknown) {
 		const error = err as { stderr?: string; message?: string };
 		const msg = error.stderr || error.message || "Unknown error";
-		// Non-fatal: memory is still local even if push fails
 		return `push warning: ${msg}`;
 	}
+}
+
+// ─── Helper: HTTP request to gateway consultation API ────────────────────────
+
+function consultGateway(method: string, path: string, body?: Record<string, unknown>): Promise<Record<string, unknown>> {
+	return new Promise((resolve, reject) => {
+		const host = process.env.GATEWAY_HOST || "chris";
+		const port = process.env.GATEWAY_PORT || "18790";
+		const bodyStr = body ? JSON.stringify(body) : undefined;
+		const headers: Record<string, string | number> = { "Content-Type": "application/json" };
+		if (bodyStr) {
+			headers["Content-Length"] = Buffer.byteLength(bodyStr);
+		}
+
+		const options: http.RequestOptions = {
+			hostname: host,
+			port: parseInt(port, 10),
+			path,
+			method,
+			headers,
+			timeout: 65000,
+		};
+
+		const req = http.request(options, (res) => {
+			let data = "";
+			res.on("data", (chunk) => { data += chunk; });
+			res.on("end", () => {
+				try {
+					const parsed = JSON.parse(data);
+					if (res.statusCode && res.statusCode >= 400) {
+						reject(new Error(parsed.error || `HTTP ${res.statusCode}`));
+					} else {
+						resolve(parsed);
+					}
+				} catch {
+					reject(new Error(`Invalid response: ${data.substring(0, 200)}`));
+				}
+			});
+		});
+
+		req.on("error", (err) => reject(err));
+		req.on("timeout", () => { req.destroy(); reject(new Error("Gateway request timed out")); });
+
+		if (bodyStr) {
+			req.write(bodyStr);
+		}
+		req.end();
+	});
 }
 
 function runBdJson<T>(args: string[]): T | null {
@@ -1249,6 +1332,178 @@ export default function (api: {
 					text: `Migration complete: ${results.length}/${entries.length} entries processed.\n${results.join("\n")}${pushNote}`,
 				}],
 			};
+		},
+	});
+
+	// consult_expert: Synchronous cross-expert consultation
+	api.registerTool({
+		name: "consult_expert",
+		description:
+			"Ask another expert and wait for their response (blocks up to 60s). Use for simple factual lookups. priority=normal uses Haiku (fast), priority=high uses Sonnet (stronger reasoning).",
+		parameters: {
+			type: "object",
+			properties: {
+				expert: {
+					type: "string",
+					enum: ["ron", "ben", "leslie", "tom", "ann", "april"],
+					description: "Which expert to consult",
+				},
+				question: {
+					type: "string",
+					description: "The question to ask the expert",
+				},
+				priority: {
+					type: "string",
+					enum: ["normal", "high"],
+					description: "normal = Haiku (fast, factual lookups), high = Sonnet (complex analysis). Default: normal",
+				},
+			},
+			required: ["expert", "question"],
+		},
+		execute: async (_id, params) => {
+			const expert = params.expert as string;
+			const question = params.question as string;
+			const priority = (params.priority as string) || "normal";
+			const fromExpert = process.env.EXPERT_NAME || "unknown";
+
+			try {
+				const result = await consultGateway("POST", "/consult", {
+					fromExpert,
+					toExpert: expert,
+					question,
+					priority,
+					mode: "sync",
+					depth: 0,
+				}) as { requestId?: string; response?: string };
+
+				return {
+					content: [{
+						type: "text",
+						text: result.response
+							? `**${expert}** responds:\n\n${result.response}`
+							: `Consultation with ${expert} returned no response.`,
+					}],
+				};
+			} catch (err: unknown) {
+				const error = err as { message?: string };
+				return {
+					content: [{
+						type: "text",
+						text: `Consultation with ${expert} failed: ${error.message || "Unknown error"}`,
+					}],
+				};
+			}
+		},
+	});
+
+	// request_consultation: Asynchronous cross-expert consultation
+	api.registerTool({
+		name: "request_consultation",
+		description:
+			"Queue a question for another expert and get a requestId back immediately. Use for substantial analysis that takes time. Continue working while waiting, then check with check_consultation.",
+		parameters: {
+			type: "object",
+			properties: {
+				expert: {
+					type: "string",
+					enum: ["ron", "ben", "leslie", "tom", "ann", "april"],
+					description: "Which expert to consult",
+				},
+				question: {
+					type: "string",
+					description: "The question to ask the expert",
+				},
+				priority: {
+					type: "string",
+					enum: ["normal", "high"],
+					description: "normal = Haiku (fast), high = Sonnet (complex). Default: normal",
+				},
+			},
+			required: ["expert", "question"],
+		},
+		execute: async (_id, params) => {
+			const expert = params.expert as string;
+			const question = params.question as string;
+			const priority = (params.priority as string) || "normal";
+			const fromExpert = process.env.EXPERT_NAME || "unknown";
+
+			try {
+				const result = await consultGateway("POST", "/consult", {
+					fromExpert,
+					toExpert: expert,
+					question,
+					priority,
+					mode: "async",
+					depth: 0,
+				}) as { requestId?: string; status?: string };
+
+				return {
+					content: [{
+						type: "text",
+						text: `Consultation queued with **${expert}**: requestId = \`${result.requestId}\` (status: ${result.status})\n\nContinue working, then call \`check_consultation\` with this requestId to get the result.`,
+					}],
+				};
+			} catch (err: unknown) {
+				const error = err as { message?: string };
+				return {
+					content: [{
+						type: "text",
+						text: `Failed to queue consultation with ${expert}: ${error.message || "Unknown error"}`,
+					}],
+				};
+			}
+		},
+	});
+
+	// check_consultation: Check status of async consultation
+	api.registerTool({
+		name: "check_consultation",
+		description:
+			"Check if an async consultation has completed. Returns status and response when ready.",
+		parameters: {
+			type: "object",
+			properties: {
+				requestId: {
+					type: "string",
+					description: "The requestId returned by request_consultation",
+				},
+			},
+			required: ["requestId"],
+		},
+		execute: async (_id, params) => {
+			const requestId = params.requestId as string;
+
+			try {
+				const result = await consultGateway("GET", `/consult/${encodeURIComponent(requestId)}`) as {
+					status?: string;
+					response?: string;
+					toExpert?: string;
+				};
+
+				if (result.status === "completed" && result.response) {
+					return {
+						content: [{
+							type: "text",
+							text: `**${result.toExpert || "Expert"}** consultation complete:\n\n${result.response}`,
+						}],
+					};
+				}
+
+				return {
+					content: [{
+						type: "text",
+						text: `Consultation \`${requestId}\` status: **${result.status}**. ${result.status === "processing" ? "Still working — check again shortly." : result.status === "queued" ? "In queue — check again shortly." : `Response: ${result.response || "none"}`}`,
+					}],
+				};
+			} catch (err: unknown) {
+				const error = err as { message?: string };
+				return {
+					content: [{
+						type: "text",
+						text: `Failed to check consultation ${requestId}: ${error.message || "Unknown error"}`,
+					}],
+				};
+			}
 		},
 	});
 }

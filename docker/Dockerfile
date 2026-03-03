@@ -39,6 +39,7 @@ RUN npm install -g openclaw@latest spawnee@latest
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     /root/.local/bin/uv tool install chunkhound
 ENV PATH="/root/.local/bin:/root/.local/share/uv/tools/chunkhound/bin:$PATH"
+ENV EXPERT_NAME="ron"
 
 # Install beads (bd) for graph-based episodic memory
 RUN ARCH=$(dpkg --print-architecture) && \
@@ -79,7 +80,7 @@ RUN chmod -R a-w /workspace/repos
 # Copy OpenClaw workspace configuration
 COPY openclaw-config/AGENTS.md /workspace/AGENTS.md
 COPY openclaw-config/SOUL.md /workspace/SOUL.md
-COPY openclaw-config/TOOLS.md /workspace/TOOLS.md
+COPY openclaw-config/shared/TOOLS.md /workspace/TOOLS.md
 
 # Copy and compile custom plugin (OpenClaw loads .js, not .ts)
 COPY plugins/swanson-tools/ /workspace/extensions/swanson-tools/
@@ -90,7 +91,7 @@ RUN cd /workspace/extensions/swanson-tools && \
     rm -rf node_modules package.json package-lock.json
 
 # Copy repo catalog for agent context
-COPY openclaw-config/repos.md /workspace/repos.md
+COPY openclaw-config/shared/repos.md /workspace/repos.md
 
 # Copy ChunkHound multi-repo config
 COPY chunkhound-config.json /workspace/chunkhound-config.json

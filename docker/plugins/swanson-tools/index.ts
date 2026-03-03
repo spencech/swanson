@@ -18,9 +18,53 @@ function runBd(args: string[]): string {
 		});
 		return result.trim();
 	} catch (err: unknown) {
-		const error = err as { stderr?: string; stdout?: string; message?: string };
+		const error = err as { code?: string; stderr?: string; stdout?: string; message?: string };
+		if (error.code === "ENOENT") {
+			return "bd error: bd binary not found — is beads installed?";
+		}
 		const msg = error.stderr || error.stdout || error.message || "Unknown error";
+		if (msg.includes("dolt") || msg.includes("Dolt")) {
+			return `bd error: Dolt not installed or not functional — ${msg}`;
+		}
 		return `bd error: ${msg}`;
+	}
+}
+
+function pushMemoryToGitHub(message: string): string {
+	try {
+		// Step 1: bd sync (Dolt → JSONL export)
+		const syncResult = runBd(["sync"]);
+		if (syncResult.startsWith("bd error:")) {
+			return `push warning: bd sync failed — ${syncResult}`;
+		}
+
+		// Step 2: Stage beads files
+		execFileSync("git", ["add", ".beads/"], {
+			cwd: MEMORY_DIR,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+
+		// Step 3: Commit with descriptive message
+		execFileSync("git", ["commit", "-m", `memory: ${message}`, "--allow-empty"], {
+			cwd: MEMORY_DIR,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+
+		// Step 4: Push to origin
+		execFileSync("git", ["push", "origin", "HEAD"], {
+			cwd: MEMORY_DIR,
+			encoding: "utf-8",
+			timeout: 30000,
+		});
+
+		return "pushed";
+	} catch (err: unknown) {
+		const error = err as { stderr?: string; message?: string };
+		const msg = error.stderr || error.message || "Unknown error";
+		// Non-fatal: memory is still local even if push fails
+		return `push warning: ${msg}`;
 	}
 }
 
@@ -704,14 +748,15 @@ export default function (api: {
 				if (!supResult.startsWith("bd error:")) edges.push(`supersedes: ${supersedes}`);
 			}
 
-			// Sync to remote
-			runBd(["sync"]);
+			// Push to GitHub
+			const pushResult = pushMemoryToGitHub(`remember: ${title}`);
+			const pushNote = pushResult !== "pushed" ? `\n[${pushResult}]` : "";
 
 			const edgeInfo = edges.length > 0 ? `\nEdges: ${edges.join(", ")}` : "";
 			return {
 				content: [{
 					type: "text",
-					text: `Memory stored: ${memoryId} [${category}/${importance}] "${title}"${edgeInfo}`,
+					text: `Memory stored: ${memoryId} [${category}/${importance}] "${title}"${edgeInfo}${pushNote}`,
 				}],
 			};
 		},
@@ -928,12 +973,13 @@ export default function (api: {
 				return { content: [{ type: "text", text: `Failed to create edge: ${result}` }] };
 			}
 
-			runBd(["sync"]);
+			const pushResult = pushMemoryToGitHub(`relate: ${fromId} --[${relationship}]--> ${toId}`);
+			const pushNote = pushResult !== "pushed" ? ` [${pushResult}]` : "";
 
 			return {
 				content: [{
 					type: "text",
-					text: `Edge created: ${fromId} --[${relationship}]--> ${toId}`,
+					text: `Edge created: ${fromId} --[${relationship}]--> ${toId}${pushNote}`,
 				}],
 			};
 		},
@@ -981,12 +1027,13 @@ export default function (api: {
 				return { content: [{ type: "text", text: `Failed to archive memory: ${closeResult}` }] };
 			}
 
-			runBd(["sync"]);
+			const pushResult = pushMemoryToGitHub(`forget: ${memoryId} — ${reason}`);
+			const pushNote = pushResult !== "pushed" ? ` [${pushResult}]` : "";
 
 			return {
 				content: [{
 					type: "text",
-					text: `Memory archived: ${memoryId}${replacedBy ? ` (replaced by ${replacedBy})` : ""} — ${reason}`,
+					text: `Memory archived: ${memoryId}${replacedBy ? ` (replaced by ${replacedBy})` : ""} — ${reason}${pushNote}`,
 				}],
 			};
 		},
@@ -1086,14 +1133,15 @@ export default function (api: {
 
 				// Update consolidation timestamp
 				runBd(["kv", "set", "memory.last_consolidation", new Date().toISOString()]);
-				runBd(["sync"]);
+				const pushResult = pushMemoryToGitHub(`consolidate: pruned ${pruned.length} stale memories`);
+				const pushNote = pushResult !== "pushed" ? `\n[${pushResult}]` : "";
 
 				return {
 					content: [{
 						type: "text",
-						text: pruned.length > 0
+						text: (pruned.length > 0
 							? `Pruned ${pruned.length} stale P3+ memories:\n${pruned.map((p) => `- ${p}`).join("\n")}`
-							: `No stale P3+ memories found (checked ${staleItems.length} stale items).`,
+							: `No stale P3+ memories found (checked ${staleItems.length} stale items).`) + pushNote,
 					}],
 				};
 			}
@@ -1192,12 +1240,13 @@ export default function (api: {
 				}
 			}
 
-			runBd(["sync"]);
+			const pushResult = pushMemoryToGitHub(`migrate: ${results.length} entries from KNOWLEDGE.md`);
+			const pushNote = pushResult !== "pushed" ? `\n[${pushResult}]` : "";
 
 			return {
 				content: [{
 					type: "text",
-					text: `Migration complete: ${results.length}/${entries.length} entries processed.\n${results.join("\n")}`,
+					text: `Migration complete: ${results.length}/${entries.length} entries processed.\n${results.join("\n")}${pushNote}`,
 				}],
 			};
 		},

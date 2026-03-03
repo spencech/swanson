@@ -62,6 +62,14 @@ MEMORY_REPO="/workspace/repos/swanson-db"
 chmod -R u+w "$MEMORY_REPO"
 export BD_ACTOR="swanson-agent"
 
+# Verify Dolt is installed (hard fail — memory system requires it)
+if ! command -v dolt &>/dev/null; then
+  echo "FATAL: Dolt binary not found. Episodic memory requires Dolt."
+  echo "The Docker image must install Dolt. Cannot start without it."
+  exit 1
+fi
+echo "Dolt version: $(dolt version | head -1)"
+
 # Configure git identity for push operations
 cd "$MEMORY_REPO"
 git config user.email "swanson@teachupbeat.com"
@@ -70,9 +78,17 @@ git config user.name "Swanson Agent"
 # Unshallow the clone so bd sync can push (clone-repos uses --depth 1)
 git fetch --unshallow 2>/dev/null || true
 
-# Initialize beads memory graph if not already present
+# Clean up any no-db workaround from prior failed starts
+if [ -f "$MEMORY_REPO/.beads/config.json" ]; then
+  sed -i 's/"no-db":\s*true/"no-db": false/g' "$MEMORY_REPO/.beads/config.json" 2>/dev/null || true
+fi
+
+# Three-state beads initialization:
+#   1. Brand new: no .beads/ at all → full init
+#   2. Fresh container (Dolt DB lost): .beads/ exists but no .beads/dolt/ → reimport from JSONL
+#   3. Running container: .beads/ and .beads/dolt/ both exist → sync
 if [ ! -d "$MEMORY_REPO/.beads" ]; then
-  echo "=== Initializing beads memory graph in swanson-db ==="
+  echo "=== [INIT] Initializing beads memory graph in swanson-db ==="
   bd init --prefix memory --quiet
   bd kv set "memory.version" "1.0.0"
   bd kv set "memory.initialized" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -80,9 +96,34 @@ if [ ! -d "$MEMORY_REPO/.beads" ]; then
   git add -A && git commit -q -m "Initialize beads memory graph"
   git push origin HEAD 2>/dev/null || echo "WARNING: Could not push beads init to remote"
   echo "Beads memory graph initialized in swanson-db"
+elif [ ! -d "$MEMORY_REPO/.beads/dolt" ]; then
+  echo "=== [REIMPORT] Beads directory found but Dolt DB missing — reimporting from JSONL ==="
+  if [ -f "$MEMORY_REPO/.beads/issues.jsonl" ]; then
+    bd init --from-jsonl --prefix memory --quiet 2>/dev/null || bd init --prefix memory --quiet
+    git add -A && git commit -q -m "Reimport beads memory graph from JSONL (Dolt DB restored)" 2>/dev/null || true
+    git push origin HEAD 2>/dev/null || echo "WARNING: Could not push reimported graph to remote"
+    echo "Reimported beads graph from JSONL export"
+  else
+    echo "WARNING: No JSONL export found either — reinitializing fresh"
+    rm -rf "$MEMORY_REPO/.beads"
+    bd init --prefix memory --quiet
+    bd kv set "memory.version" "1.0.0"
+    bd kv set "memory.initialized" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    bd kv set "memory.last_consolidation" "never"
+    git add -A && git commit -q -m "Reinitialize beads memory graph (Dolt DB lost)"
+    git push origin HEAD 2>/dev/null || echo "WARNING: Could not push beads reinit to remote"
+  fi
 else
-  echo "Beads memory graph found in swanson-db"
+  echo "=== [SYNC] Beads memory graph found with Dolt DB intact ==="
   bd sync 2>/dev/null || true
+fi
+
+# Health check: verify beads is functional
+OPEN_COUNT=$(bd list --status=open 2>/dev/null | wc -l || echo "FAILED")
+if [ "$OPEN_COUNT" = "FAILED" ] || [ -z "$OPEN_COUNT" ]; then
+  echo "WARNING: Beads health check failed — memory operations may not work"
+else
+  echo "Beads OK: ${OPEN_COUNT} open memories"
 fi
 cd /workspace
 

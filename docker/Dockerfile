@@ -47,6 +47,13 @@ RUN ARCH=$(dpkg --print-architecture) && \
     tar -xz -C /usr/local/bin bd && \
     chmod +x /usr/local/bin/bd
 
+# Install Dolt (required by beads for graph-backed episodic memory)
+RUN ARCH=$(dpkg --print-architecture) && \
+    curl -sSL "https://github.com/dolthub/dolt/releases/latest/download/dolt-linux-${ARCH}.tar.gz" | \
+    tar -xz --strip-components=2 -C /usr/local/bin && \
+    chmod +x /usr/local/bin/dolt && \
+    dolt version
+
 # Install AWS CLI via pip in isolated venv
 RUN python3 -m venv /opt/awscli && /opt/awscli/bin/pip install awscli && \
     ln -s /opt/awscli/bin/aws /usr/local/bin/aws
@@ -74,8 +81,13 @@ COPY openclaw-config/AGENTS.md /workspace/AGENTS.md
 COPY openclaw-config/SOUL.md /workspace/SOUL.md
 COPY openclaw-config/TOOLS.md /workspace/TOOLS.md
 
-# Copy custom plugin
+# Copy and compile custom plugin (OpenClaw loads .js, not .ts)
 COPY plugins/swanson-tools/ /workspace/extensions/swanson-tools/
+RUN cd /workspace/extensions/swanson-tools && \
+    npm init -y --silent && \
+    npm install typescript @types/node --save-dev --silent && \
+    npx tsc index.ts --module commonjs --target es2020 --esModuleInterop --resolveJsonModule --outDir . --declaration && \
+    rm -rf node_modules package.json package-lock.json
 
 # Copy repo catalog for agent context
 COPY openclaw-config/repos.md /workspace/repos.md

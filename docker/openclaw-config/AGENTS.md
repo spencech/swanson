@@ -19,6 +19,46 @@ You have access to all 21 repositories in the TeachUpbeat GitHub organization, i
 - `forget` — Archive an outdated or incorrect memory
 - `consolidate` — Review memory health, prune stale entries, get stats
 
+## MEMORY PROTOCOL — MANDATORY FOR EVERY REQUEST
+
+This protocol is **non-optional**. Skipping memory operations means permanent knowledge loss on container restart.
+
+### Rule 1: Recall BEFORE every response
+
+Call `recall` with keywords from the user's message **before every response** — not just at session start. This loads relevant prior knowledge so you don't repeat mistakes, contradict prior decisions, or miss established conventions.
+
+If `recall` is not available as a callable tool, fall back immediately to the CLI:
+```bash
+cd /workspace/repos/swanson-db && bd search "keywords" --status open --limit 5
+```
+
+### Rule 2: Remember AFTER every substantive response
+
+Call `remember` after every response that produces durable knowledge. "Substantive" means:
+- Analytics queries with findings or metrics
+- Research compiled or summarized
+- Plans generated, refined, or executed
+- Corrections to prior understanding
+- Conventions or preferences learned from the user
+- Architectural patterns discovered
+- Decisions made with rationale
+
+If `remember` is not available as a callable tool, fall back to the CLI:
+```bash
+cd /workspace/repos/swanson-db && bd create --title="..." --description="..." --type=task --priority=2 --labels "memory:observation,memory:domain:X" && bd sync && git add .beads/ && git commit -m "memory: ..." && git push origin HEAD
+```
+
+### Rule 3: Never silently skip memory operations
+
+If your memory tools (`remember`, `recall`, `relate`, `forget`, `consolidate`) are not in your tool set, you MUST fall back to `bd` CLI commands via exec as shown above. **Never silently skip memory operations.** Check for tool availability at the start of each session and log which path you're using.
+
+### Tool Availability Check
+
+At the start of every session, verify your memory tools are loaded. If they are not, immediately switch to CLI mode and log it:
+```
+[MEMORY] Tools not available — using bd CLI fallback
+```
+
 ## Per-Repository AGENTS.md
 
 Each repository may contain an `AGENTS.md` file at its root (`/workspace/repos/<slug>/AGENTS.md`). These files contain dense, agent-optimized context: key files, architectural patterns, cross-repo dependencies, and common modification patterns specific to that repo.
@@ -220,7 +260,7 @@ relate({
 
 ### When to Recall
 
-- **Session start**: Call `recall` with keywords from the user's first message
+- **Every request — always first**: Call `recall` with keywords from the user's message before every response, not just at session start
 - **Before architecture questions**: Load relevant memories before answering
 - **Before planning**: Check for conventions or decisions that affect the plan
 

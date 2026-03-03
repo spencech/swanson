@@ -25,11 +25,19 @@ All 21 TeachUpbeat repositories are indexed locally with ChunkHound. Use these t
 
 ## Episodic Memory (Beads Graph)
 
-Memory is stored as a beads graph in `/workspace/repos/swanson-db/.beads/`. Use the registered tools (`remember`, `recall`, `relate`, `forget`, `consolidate`) when available. CLI fallback:
+Memory is stored as a beads graph in `/workspace/repos/swanson-db/.beads/`. Use the registered tools (`remember`, `recall`, `relate`, `forget`, `consolidate`) when available.
+
+**MANDATORY CLI FALLBACK:** If `remember`, `recall`, `relate`, `forget`, or `consolidate` are not available as callable tools, you MUST fall back to the `bd` CLI via exec. This is not optional — memory operations must happen on every request regardless of tool availability.
 
 ```bash
-# Search memories
-cd /workspace/repos/swanson-db && bd search "authentication"
+# Recall (BEFORE every response)
+cd /workspace/repos/swanson-db && bd search "keywords from user message" --status open --limit 5
+
+# Remember (AFTER every substantive response)
+cd /workspace/repos/swanson-db && bd create --title="..." --description="..." --type=task --priority=2 --labels "memory:observation,memory:domain:X"
+
+# Push to GitHub (AFTER every memory write)
+cd /workspace/repos/swanson-db && bd sync && git add .beads/ && git commit -m "memory: ..." && git push origin HEAD
 
 # Show a specific memory
 cd /workspace/repos/swanson-db && bd show memory-abc --json
@@ -43,11 +51,14 @@ cd /workspace/repos/swanson-db && bd query "label=memory:convention AND status=o
 # View the full graph
 cd /workspace/repos/swanson-db && bd graph --all --compact
 
-# Sync to remote (push changes to GitHub)
-cd /workspace/repos/swanson-db && bd sync
+# Create relationship edge
+cd /workspace/repos/swanson-db && bd dep relate <id1> <id2>
+
+# Archive a memory
+cd /workspace/repos/swanson-db && bd close <id> --reason="..."
 ```
 
-Always prefer the registered tools when available — fall back to CLI only when they are not in your tool set.
+**At session start**, check whether memory tools are in your tool set. If not, log `[MEMORY] Tools not available — using bd CLI fallback` and use the CLI commands above for all memory operations.
 
 ## CLI Fallback (ChunkHound)
 
@@ -67,7 +78,7 @@ cd /workspace/repos/<repo-name> && chunkhound research "How does the survey subm
 for repo in /workspace/repos/*/; do echo "=== $(basename $repo) ==="; cd "$repo" && chunkhound search --semantic "your query" 2>/dev/null; done
 ```
 
-Always prefer the registered tools when available — fall back to CLI only when they are not in your tool set.
+Prefer the registered tools when available — fall back to CLI when they are not in your tool set.
 
 ## MySQL (Live Database Queries)
 

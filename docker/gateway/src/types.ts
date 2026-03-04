@@ -31,7 +31,8 @@ export interface ConsultationRequest {
 
 export interface LogEntry {
 	ts: string;
-	type: "classify" | "request" | "event" | "response" | "consult" | "consult_response" | "error";
+	type: "classify" | "request" | "event" | "response" | "consult" | "consult_response" | "error"
+		| "brief" | "fanout" | "tool" | "synthesis" | "aggregation";
 	from: string;
 	to?: string;
 	confidence?: number;
@@ -47,6 +48,17 @@ export interface LogEntry {
 	requestId?: string;
 	question?: string;
 	error?: string;
+	// Orchestration fields
+	mode?: "single" | "multi";
+	supporting?: string[];
+	focus?: Record<string, string>;
+	tool?: string;
+	toolPhase?: string;
+	expert?: string;
+	status?: string;
+	responseLen?: number;
+	inputLen?: number;
+	brief?: string;
 }
 
 export const EXPERTS = ["ron", "ben", "leslie", "tom", "ann", "april"] as const;

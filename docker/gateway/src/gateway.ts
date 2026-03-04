@@ -198,6 +198,9 @@ wss.on("connection", (clientWs: WebSocket) => {
 				to: primaryExpert,
 				confidence: classification.confidence,
 				reason: classification.reason,
+				mode: isMultiExpert ? "multi" : "single",
+				supporting: supportingExperts,
+				focus: classification.focus,
 			});
 			requestLogger.log({
 				ts: new Date().toISOString(),
@@ -253,13 +256,27 @@ async function handleSingleExpert(
 				const isAgentEvent = expertMsg.type === "event" && (expertMsg as { event?: string }).event === "agent";
 
 				if (isAgentEvent) {
-					const payload = (expertMsg as { payload?: { data?: { phase?: string; delta?: string }; stream?: string } }).payload;
+					const payload = (expertMsg as { payload?: { data?: { phase?: string; delta?: string; name?: string; tool?: string }; stream?: string } }).payload;
 					if (payload?.data?.phase) {
 						requestLogger.log({
 							ts: new Date().toISOString(),
 							type: "event",
 							from: expert,
 							phase: payload.data.phase,
+						});
+					}
+
+					// Log tool events (recall, remember, search, consult, etc.)
+					if (payload?.stream === "tool") {
+						const toolName = payload.data?.name || payload.data?.tool || "unknown";
+						const toolPhase = payload.data?.phase || "call";
+						console.log(`[gateway] 🔧 ${expert} tool: ${toolName} (${toolPhase})`);
+						requestLogger.log({
+							ts: new Date().toISOString(),
+							type: "tool",
+							from: expert,
+							tool: toolName,
+							toolPhase,
 						});
 					}
 
@@ -380,6 +397,22 @@ async function handleMultiExpert(
 	startTime: number,
 ): Promise<void> {
 	const allExperts = [primaryExpert, ...supportingExperts];
+	console.log(`[gateway] ═══ MULTI-EXPERT FAN-OUT ═══`);
+	console.log(`[gateway]   Primary: ${primaryExpert}`);
+	console.log(`[gateway]   Supporting: [${supportingExperts.join(", ")}]`);
+	console.log(`[gateway]   Focus: ${JSON.stringify(focus || {})}`);
+	console.log(`[gateway]   Session: ${sessionKey}`);
+
+	requestLogger.log({
+		ts: new Date().toISOString(),
+		type: "fanout",
+		from: "chris",
+		phase: "start",
+		message: `Multi-expert fan-out: primary=${primaryExpert}, supporting=[${supportingExperts.join(",")}]`,
+		mode: "multi",
+		supporting: supportingExperts,
+		focus,
+	});
 
 	// Send fanout.start event
 	if (clientWs.readyState === WebSocket.OPEN) {
@@ -396,16 +429,39 @@ async function handleMultiExpert(
 		contextHint = getThreadHint(sessionKey);
 	}
 
+	// Build and log briefs for each expert
+	const briefs = new Map<ExpertName, string>();
+	for (const expert of allExperts) {
+		const brief = buildExpertBrief(expert, allExperts, focus, messageText, contextHint);
+		briefs.set(expert, brief);
+		console.log(`[gateway]   📋 Brief for ${expert}: ${brief.replace(/\n/g, " ").slice(0, 200)}...`);
+		requestLogger.log({
+			ts: new Date().toISOString(),
+			type: "brief",
+			from: "chris",
+			to: expert,
+			brief: brief.slice(0, 1000),
+		});
+	}
+
 	// Fan out to all experts in parallel
 	let completedCount = 0;
 	const total = allExperts.length;
 
 	const results = await Promise.allSettled(
 		allExperts.map(expert => {
-			const brief = buildExpertBrief(expert, allExperts, focus, messageText, contextHint);
+			const brief = briefs.get(expert)!;
 			return fanOutToExpert(expert, brief, sessionKey, requestLogger, (status: string) => {
-				// Progress callback
+				// Progress callback — log state transitions
 				if (status === "complete" || status === "failed") completedCount++;
+				console.log(`[gateway]   📡 ${expert}: ${status} (${completedCount}/${total})`);
+				requestLogger.log({
+					ts: new Date().toISOString(),
+					type: "fanout",
+					from: expert,
+					status,
+					phase: status,
+				});
 				if (clientWs.readyState === WebSocket.OPEN) {
 					clientWs.send(JSON.stringify({
 						type: "event",
@@ -432,11 +488,44 @@ async function handleMultiExpert(
 	const succeeded = expertResponses.filter(r => r.status === "complete" && r.responseText.length > 0);
 	const primaryResponse = expertResponses.find(r => r.expert === primaryExpert);
 
+	// Log aggregation summary
+	console.log(`[gateway] ─── AGGREGATION ───`);
+	for (const r of expertResponses) {
+		const duration = r.completedAt ? `${r.completedAt - r.startedAt}ms` : "n/a";
+		console.log(`[gateway]   ${r.expert}: ${r.status} | ${r.responseText.length} chars | ${duration}${r.error ? ` | error: ${r.error}` : ""}`);
+	}
 	console.log(`[gateway] Fan-out complete: ${succeeded.length}/${total} succeeded`);
+
+	requestLogger.log({
+		ts: new Date().toISOString(),
+		type: "aggregation",
+		from: "chris",
+		message: `${succeeded.length}/${total} experts succeeded`,
+		phase: "collected",
+	});
+	for (const r of expertResponses) {
+		requestLogger.log({
+			ts: new Date().toISOString(),
+			type: "aggregation",
+			from: r.expert,
+			status: r.status,
+			responseLen: r.responseText.length,
+			duration_ms: r.completedAt ? r.completedAt - r.startedAt : undefined,
+			error: r.error,
+		});
+	}
 
 	// Determine what to do with the results
 	if (succeeded.length === 0) {
 		// All experts failed
+		console.error(`[gateway] ❌ ALL experts failed — cannot produce response`);
+		requestLogger.log({
+			ts: new Date().toISOString(),
+			type: "error",
+			from: "chris",
+			message: "All experts failed",
+			error: expertResponses.map(r => `${r.expert}: ${r.error}`).join("; "),
+		});
 		if (clientWs.readyState === WebSocket.OPEN) {
 			clientWs.send(JSON.stringify({
 				type: "res",
@@ -451,7 +540,17 @@ async function handleMultiExpert(
 	if (succeeded.length === 1) {
 		// Only one succeeded — stream raw response, skip synthesis
 		const solo = succeeded[0];
-		console.log(`[gateway] Only ${solo.expert} succeeded — streaming raw response (no synthesis)`);
+		const failed = expertResponses.filter(r => r.status === "failed");
+		console.log(`[gateway] Only ${solo.expert} succeeded (${failed.map(f => `${f.expert}: ${f.error}`).join(", ")}) — streaming raw, no synthesis`);
+		requestLogger.log({
+			ts: new Date().toISOString(),
+			type: "fanout",
+			from: "chris",
+			phase: "single-fallback",
+			message: `Only ${solo.expert} succeeded, skipping synthesis`,
+			expert: solo.expert,
+			responseLen: solo.responseText.length,
+		});
 		streamRawResponse(clientWs, reqId, solo.expert, solo.responseText);
 
 		if (sessionKey !== "main") {
@@ -477,7 +576,33 @@ async function handleMultiExpert(
 	}
 
 	try {
+		const totalInputChars = succeeded.reduce((sum, r) => sum + r.responseText.length, 0);
+		console.log(`[gateway] ─── SYNTHESIS ───`);
+		console.log(`[gateway]   Input: ${succeeded.length} responses, ${totalInputChars} total chars`);
+		const synthesisStart = Date.now();
+
+		requestLogger.log({
+			ts: new Date().toISOString(),
+			type: "synthesis",
+			from: "chris",
+			phase: "start",
+			message: `Synthesizing ${succeeded.length} expert responses`,
+			inputLen: totalInputChars,
+		});
+
 		const synthesizedText = await synthesizeAndStream(clientWs, primaryExpert, succeeded, messageText);
+
+		const synthesisDuration = Date.now() - synthesisStart;
+		console.log(`[gateway]   Output: ${synthesizedText.length} chars in ${synthesisDuration}ms`);
+
+		requestLogger.log({
+			ts: new Date().toISOString(),
+			type: "synthesis",
+			from: "chris",
+			phase: "complete",
+			responseLen: synthesizedText.length,
+			duration_ms: synthesisDuration,
+		});
 
 		// Write turn logs for each expert + synthesis
 		if (sessionKey !== "main") {
@@ -493,6 +618,7 @@ async function handleMultiExpert(
 				type: "response",
 				from: r.expert,
 				duration_ms: (r.completedAt || Date.now()) - r.startedAt,
+				responseLen: r.responseText.length,
 				session: sessionKey,
 			});
 		}
@@ -502,8 +628,12 @@ async function handleMultiExpert(
 			from: "chris",
 			message: "synthesis",
 			duration_ms: Date.now() - startTime,
+			responseLen: synthesizedText.length,
 			session: sessionKey,
 		});
+
+		const totalDuration = Date.now() - startTime;
+		console.log(`[gateway] ═══ FAN-OUT COMPLETE ═══ ${totalDuration}ms total`);
 
 		// Send final response
 		if (clientWs.readyState === WebSocket.OPEN) {
@@ -516,15 +646,39 @@ async function handleMultiExpert(
 			}));
 		}
 	} catch (err) {
-		console.error(`[gateway] Synthesis failed:`, (err as Error).message);
+		console.error(`[gateway] ⚠️ Synthesis failed:`, (err as Error).message);
+		requestLogger.log({
+			ts: new Date().toISOString(),
+			type: "synthesis",
+			from: "chris",
+			phase: "failed",
+			error: (err as Error).message,
+		});
 
 		// Fall back to primary expert's raw response
 		if (primaryResponse && primaryResponse.status === "complete" && primaryResponse.responseText.length > 0) {
-			console.log(`[gateway] Falling back to primary expert's raw response`);
+			console.log(`[gateway]   Falling back to ${primaryExpert}'s raw response (${primaryResponse.responseText.length} chars)`);
+			requestLogger.log({
+				ts: new Date().toISOString(),
+				type: "synthesis",
+				from: "chris",
+				phase: "fallback",
+				message: `Using ${primaryExpert} raw response`,
+				expert: primaryExpert,
+			});
 			streamRawResponse(clientWs, reqId, primaryExpert, primaryResponse.responseText);
 		} else {
 			// Use first successful response
 			const fallback = succeeded[0];
+			console.log(`[gateway]   Falling back to ${fallback.expert}'s raw response (${fallback.responseText.length} chars)`);
+			requestLogger.log({
+				ts: new Date().toISOString(),
+				type: "synthesis",
+				from: "chris",
+				phase: "fallback",
+				message: `Using ${fallback.expert} raw response (primary unavailable)`,
+				expert: fallback.expert,
+			});
 			streamRawResponse(clientWs, reqId, fallback.expert, fallback.responseText);
 		}
 
@@ -598,6 +752,7 @@ function fanOutToExpert(
 			}
 		}, EXPERT_TIMEOUT_MS);
 
+		console.log(`[gateway]   → Connecting to ${expert}...`);
 		expertPool.connectToExpert(
 			expert,
 			(expertData: string) => {
@@ -607,7 +762,21 @@ function fanOutToExpert(
 				const isAgentEvent = expertMsg.type === "event" && (expertMsg as { event?: string }).event === "agent";
 
 				if (isAgentEvent) {
-					const payload = (expertMsg as { payload?: { data?: { phase?: string; delta?: string }; stream?: string } }).payload;
+					const payload = (expertMsg as { payload?: { data?: { phase?: string; delta?: string; name?: string; tool?: string }; stream?: string } }).payload;
+
+					// Log tool events (recall, remember, search, consult, etc.)
+					if (payload?.stream === "tool") {
+						const toolName = payload.data?.name || payload.data?.tool || "unknown";
+						const toolPhase = payload.data?.phase || "call";
+						console.log(`[gateway] 🔧 ${expert} tool: ${toolName} (${toolPhase})`);
+						requestLogger.log({
+							ts: new Date().toISOString(),
+							type: "tool",
+							from: expert,
+							tool: toolName,
+							toolPhase,
+						});
+					}
 
 					if (payload?.stream === "assistant" && payload?.data?.delta) {
 						if (result.status === "pending") {
@@ -663,9 +832,11 @@ function fanOutToExpert(
 				resolve(result);
 			},
 		).then((expertWs) => {
+			console.log(`[gateway]   ✓ Connected to ${expert}, sending brief`);
 			const internalReq = createAgentRequest(brief, sessionKey);
 			expertWs.send(internalReq);
 		}).catch((err) => {
+			console.error(`[gateway]   ✗ Failed to connect to ${expert}: ${(err as Error).message}`);
 			clearTimeout(timeout);
 			result.status = "failed";
 			result.error = (err as Error).message;

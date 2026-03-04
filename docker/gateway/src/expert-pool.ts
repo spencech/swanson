@@ -1,6 +1,6 @@
 import WebSocket from "ws";
 import { ExpertName, expertWsUrl, LIMITS } from "./types";
-import { parseMessage, createConnectAuth } from "./protocol";
+import { parseMessage } from "./protocol";
 
 interface ExpertSession {
 	ws: WebSocket;
@@ -48,6 +48,7 @@ export class ExpertPool {
 
 			ws.on("message", (raw) => {
 				const data = raw.toString();
+				console.log(`[pool] ← ${expert}: ${data.slice(0, 300)}`);
 				const msg = parseMessage(data);
 
 				if (!msg) {
@@ -55,15 +56,41 @@ export class ExpertPool {
 					return;
 				}
 
-				// Handle connect handshake
-				if (msg.type === "connect.challenge") {
-					ws.send(createConnectAuth(this.internalToken));
+				// Handle connect handshake — support both OpenClaw and legacy formats
+				const isOpenClawChallenge = msg.type === "event" && (msg as { event?: string }).event === "connect.challenge";
+				const isLegacyChallenge = msg.type === "connect.challenge";
+
+				if (isOpenClawChallenge || isLegacyChallenge) {
+					// Send auth in OpenClaw protocol format
+					const authFrame = JSON.stringify({
+						type: "req",
+						id: `pool-auth-${Date.now()}`,
+						method: "connect",
+						params: {
+							minProtocol: 3,
+							maxProtocol: 3,
+							client: { id: "cli", version: "1.0.0", platform: "linux", mode: "cli" },
+							role: "operator",
+							scopes: ["operator.read", "operator.write"],
+							auth: { token: this.internalToken },
+						},
+					});
+					console.log(`[pool] → ${expert} auth: ${authFrame.slice(0, 300)}`);
+					ws.send(authFrame);
 					return;
 				}
 
-				if (msg.type === "connect.result") {
+				// Handle auth response — support both OpenClaw and legacy formats
+				const isOpenClawRes = msg.type === "res" && (msg as { id?: string }).id?.startsWith("pool-auth-");
+				const isLegacyResult = msg.type === "connect.result";
+
+				if (isOpenClawRes || isLegacyResult) {
 					clearTimeout(timeout);
-					if ((msg as { status: string }).status === "ok") {
+					const isOk = isOpenClawRes
+						? (msg as { ok?: boolean }).ok === true
+						: (msg as unknown as { status: string }).status === "ok";
+
+					if (isOk) {
 						const session: ExpertSession = {
 							ws,
 							expert,
@@ -76,7 +103,8 @@ export class ExpertPool {
 						this.activeSessions.get(expert)!.push(session);
 						resolve(ws);
 					} else {
-						reject(new Error(`Auth failed with ${expert}: ${(msg as { error?: string }).error}`));
+						const error = (msg as { error?: unknown }).error;
+						reject(new Error(`Auth failed with ${expert}: ${typeof error === "string" ? error : JSON.stringify(error)}`));
 					}
 					return;
 				}
@@ -105,6 +133,21 @@ export class ExpertPool {
 			const idx = sessions.findIndex(s => s.ws === ws);
 			if (idx >= 0) sessions.splice(idx, 1);
 		}
+	}
+
+	async querySessionStats(expert: ExpertName): Promise<Record<string, unknown>> {
+		const sessions = this.activeSessions.get(expert) || [];
+		const activeSessions = sessions.filter(s => s.busy).length;
+		const totalSessions = sessions.length;
+		const oldest = sessions.length > 0
+			? Math.min(...sessions.map(s => s.createdAt))
+			: null;
+
+		return {
+			activeSessions,
+			totalSessions,
+			oldestSessionAge: oldest ? `${Math.round((Date.now() - oldest) / 1000)}s` : null,
+		};
 	}
 
 	closeAll(): void {

@@ -28,6 +28,7 @@ cat > "${OPENCLAW_HOME}/openclaw.json" << EOF
       "model": {
         "primary": "anthropic/claude-opus-4-6"
       },
+      "maxTurns": 30,
       "workspace": "/workspace",
       "repoRoot": "/workspace/repos"
     }
@@ -45,11 +46,11 @@ cat > "${OPENCLAW_HOME}/openclaw.json" << EOF
   "session": {
     "reset": {
       "mode": "idle",
-      "idleMinutes": 480
+      "idleMinutes": 60
     },
     "maintenance": {
-      "pruneAfter": "30d",
-      "maxEntries": 500
+      "pruneAfter": "7d",
+      "maxEntries": 100
     }
   }
 }

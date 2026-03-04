@@ -39,9 +39,22 @@ app.post("/consult", async (req, res) => {
 	}
 });
 
-// Health route MUST be before parameterized :requestId route
+// Static routes MUST be before parameterized :requestId route
 app.get("/consult/health", (_req, res) => {
 	res.json(broker.getHealth());
+});
+
+app.get("/consult/sessions", async (_req, res) => {
+	const stats: Record<string, unknown> = {};
+	for (const expert of EXPERTS) {
+		try {
+			const result = await expertPool.querySessionStats(expert);
+			stats[expert] = result;
+		} catch {
+			stats[expert] = { error: "unreachable" };
+		}
+	}
+	res.json(stats);
 });
 
 app.get("/consult/:requestId", (req, res) => {
@@ -69,8 +82,8 @@ wss.on("connection", (clientWs: WebSocket) => {
 	let authenticated = false;
 	let logger: ConversationLogger | null = null;
 
-	// Send connect challenge
-	clientWs.send(JSON.stringify({ type: "connect.challenge", challenge: "swanson-gateway" }));
+	// Send connect challenge (OpenClaw protocol format)
+	clientWs.send(JSON.stringify({ type: "event", event: "connect.challenge", payload: { challenge: "swanson-gateway" } }));
 
 	clientWs.on("message", async (raw) => {
 		const data = raw.toString();
@@ -81,15 +94,28 @@ wss.on("connection", (clientWs: WebSocket) => {
 			return;
 		}
 
-		// Handle authentication
-		if (msg.type === "connect.auth") {
-			const token = (msg as { token?: string }).token;
+		// Handle authentication — accept both OpenClaw protocol and legacy format
+		const isOpenClawConnect = msg.type === "req" && (msg as { method?: string }).method === "connect";
+		const isLegacyConnect = msg.type === "connect.auth";
+
+		if (isOpenClawConnect || isLegacyConnect) {
+			let token: string | undefined;
+			const reqId = (msg as { id?: string }).id;
+
+			if (isOpenClawConnect) {
+				const params = (msg as { params?: { auth?: { token?: string } } }).params;
+				token = params?.auth?.token;
+			} else {
+				token = (msg as { token?: string }).token;
+			}
+
 			if (token === CLIENT_TOKEN) {
 				authenticated = true;
-				clientWs.send(JSON.stringify({ type: "connect.result", status: "ok" }));
+				// Reply in OpenClaw protocol format
+				clientWs.send(JSON.stringify({ type: "res", id: reqId, ok: true, payload: { type: "hello-ok" } }));
 				console.log("[gateway] Client authenticated");
 			} else {
-				clientWs.send(JSON.stringify({ type: "connect.result", status: "error", error: "Invalid token" }));
+				clientWs.send(JSON.stringify({ type: "res", id: reqId, ok: false, error: { code: "AUTH_FAILED", message: "Invalid token" } }));
 				clientWs.close();
 			}
 			return;
@@ -100,11 +126,25 @@ wss.on("connection", (clientWs: WebSocket) => {
 			return;
 		}
 
-		// Handle agent requests — classify and route
-		if (msg.type === "agent.request") {
-			const messageText = extractMessageText(msg);
+		// Handle agent requests — accept both OpenClaw protocol and legacy format
+		const isOpenClawAgent = msg.type === "req" && (msg as { method?: string }).method === "agent";
+		const isLegacyAgent = msg.type === "agent.request";
+
+		if (isOpenClawAgent || isLegacyAgent) {
+			const reqId = (msg as { id?: string }).id;
+			let messageText: string | null = null;
+			let clientSessionKey: string | null = null;
+
+			if (isOpenClawAgent) {
+				const params = (msg as { params?: { message?: string; sessionKey?: string } }).params;
+				messageText = params?.message || null;
+				clientSessionKey = params?.sessionKey || null;
+			} else {
+				messageText = extractMessageText(msg);
+			}
+
 			if (!messageText) {
-				clientWs.send(JSON.stringify({ type: "error", message: "No message text in request" }));
+				clientWs.send(JSON.stringify({ type: "res", id: reqId, ok: false, error: { code: "BAD_REQUEST", message: "No message text in request" } }));
 				return;
 			}
 
@@ -114,7 +154,17 @@ wss.on("connection", (clientWs: WebSocket) => {
 			const classification = await classify(messageText);
 			const expert = classification.expert as ExpertName;
 
-			console.log(`[gateway] Classified → ${expert} (confidence: ${classification.confidence}, reason: ${classification.reason})`);
+			const sessionKey = clientSessionKey || "main";
+			console.log(`[gateway] Classified → ${expert} (confidence: ${classification.confidence}, session: ${sessionKey})`);
+
+			// Send routing announcement to client before connecting to expert
+			if (clientWs.readyState === WebSocket.OPEN) {
+				clientWs.send(JSON.stringify({
+					type: "event",
+					event: "routing",
+					payload: { expert, confidence: classification.confidence, reason: classification.reason },
+				}));
+			}
 
 			// Create logger (capture as const so closures reference this request's logger)
 			const requestLogger = new ConversationLogger(expert);
@@ -136,39 +186,84 @@ wss.on("connection", (clientWs: WebSocket) => {
 			});
 
 			try {
+				let turnCount = 0;
+
 				// Connect to expert and proxy
 				const expertWs = await expertPool.connectToExpert(
 					expert,
 					(expertData: string) => {
-						// Proxy expert messages to client
+						// Proxy expert messages to client in OpenClaw protocol format
 						const expertMsg = parseMessage(expertData);
-						if (expertMsg) {
-							// Log events
-							if (expertMsg.type === "agent.event") {
-								const payload = (expertMsg as { payload?: { data?: { phase?: string; delta?: string } } }).payload;
-								if (payload?.data?.phase) {
-									requestLogger.log({
-										ts: new Date().toISOString(),
-										type: "event",
-										from: expert,
-										phase: payload.data.phase,
-									});
-								}
-							}
+						if (!expertMsg) return;
 
-							if (expertMsg.type === "agent.response") {
+						// Agent events — experts send {type:"event", event:"agent", payload:{...}}
+						const isAgentEvent = expertMsg.type === "event" && (expertMsg as { event?: string }).event === "agent";
+
+						if (isAgentEvent) {
+							const payload = (expertMsg as { payload?: { data?: { phase?: string; delta?: string }; stream?: string } }).payload;
+							if (payload?.data?.phase) {
 								requestLogger.log({
 									ts: new Date().toISOString(),
-									type: "response",
+									type: "event",
 									from: expert,
-									duration_ms: Date.now() - startTime,
+									phase: payload.data.phase,
 								});
-								// Close expert WS after response to free pool slot
-								setTimeout(() => expertWs.close(), 100);
 							}
+
+							// Count assistant turns for observability
+							if (payload?.stream === "assistant" || payload?.data?.phase === "start") {
+								turnCount++;
+							}
+
+							// Forward with expert identity stamped
+							if (clientWs.readyState === WebSocket.OPEN) {
+								const forwarded = JSON.parse(expertData);
+								forwarded.expert = expert;
+								clientWs.send(JSON.stringify(forwarded));
+							}
+							return;
 						}
 
-						// Forward to client as-is
+						// Agent responses — experts send {type:"res", id:"...", ok:..., payload:{...}}
+						if (expertMsg.type === "res") {
+							const payload = (expertMsg as { payload?: { status?: string } }).payload;
+							const isAcceptance = payload?.status === "accepted";
+
+							if (isAcceptance) {
+								// Just an ack — agent is starting work. Keep connection open.
+								console.log(`[gateway] Agent request accepted by ${expert}`);
+								return;
+							}
+
+							// Final response (completed or error) — forward to client and close
+							const duration = Date.now() - startTime;
+							console.log(`[gateway] Request complete: expert=${expert}, session=${sessionKey}, turns=${turnCount}, duration=${duration}ms`);
+							requestLogger.log({
+								ts: new Date().toISOString(),
+								type: "response",
+								from: expert,
+								duration_ms: duration,
+								turns: turnCount,
+								session: sessionKey,
+							});
+
+							// Re-stamp with the client's request ID and expert identity
+							if (clientWs.readyState === WebSocket.OPEN) {
+								clientWs.send(JSON.stringify({
+									type: "res",
+									id: reqId,
+									ok: (expertMsg as { ok?: boolean }).ok,
+									payload: payload || { status: "ok" },
+									expert,
+								}));
+							}
+
+							// Close expert WS after final response to free pool slot
+							setTimeout(() => expertWs.close(), 100);
+							return;
+						}
+
+						// Forward any other expert messages as-is
 						if (clientWs.readyState === WebSocket.OPEN) {
 							clientWs.send(expertData);
 						}
@@ -180,15 +275,18 @@ wss.on("connection", (clientWs: WebSocket) => {
 						console.error(`[gateway] Expert ${expert} error:`, err.message);
 						if (clientWs.readyState === WebSocket.OPEN) {
 							clientWs.send(JSON.stringify({
-								type: "agent.response",
-								error: `Expert ${expert} encountered an error: ${err.message}`,
+								type: "res",
+								id: reqId,
+								ok: false,
+								error: { code: "EXPERT_ERROR", message: `Expert ${expert} encountered an error: ${err.message}` },
 							}));
 						}
 					},
 				);
 
-				// Forward the original request to the expert
-				expertWs.send(data);
+				// Forward the original request to the expert in the internal protocol format
+				const internalReq = createAgentRequest(messageText, sessionKey);
+				expertWs.send(internalReq);
 			} catch (err) {
 				console.error(`[gateway] Failed to connect to expert ${expert}:`, (err as Error).message);
 				requestLogger.log({
@@ -199,8 +297,10 @@ wss.on("connection", (clientWs: WebSocket) => {
 					error: (err as Error).message,
 				});
 				clientWs.send(JSON.stringify({
-					type: "agent.response",
-					error: `Failed to reach expert ${expert}: ${(err as Error).message}`,
+					type: "res",
+					id: reqId,
+					ok: false,
+					error: { code: "EXPERT_UNAVAILABLE", message: `Failed to reach expert ${expert}: ${(err as Error).message}` },
 				}));
 			}
 

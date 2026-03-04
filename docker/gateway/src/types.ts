@@ -30,6 +30,8 @@ export interface LogEntry {
 	delta?: string;
 	tokens?: number;
 	duration_ms?: number;
+	turns?: number;
+	session?: string;
 	priority?: string;
 	requestId?: string;
 	question?: string;

@@ -22,6 +22,7 @@ x-shared-env: &shared-env
   CF_PRIVATE_KEY_B64: ${CF_PRIVATE_KEY_B64:-}
   GATEWAY_HOST: chris
   GATEWAY_PORT: "18790"
+  OPENCLAW_DISABLE_BONJOUR: "1"
 
 x-expert-base: &expert-base
   build:

@@ -213,6 +213,11 @@ for dir in threads plans sessions; do
   fi
 done
 
+# Clean up stale thread turn logs (older than 7 days)
+find /workspace/threads -name "turn-*.md" -mtime +7 -delete 2>/dev/null || true
+find /workspace/threads -name "turns.jsonl" -mtime +7 -delete 2>/dev/null || true
+find /workspace/threads -mindepth 1 -maxdepth 1 -type d -empty -delete 2>/dev/null || true
+
 # Staggered nightly refresh — each expert refreshes at a different hour to avoid
 # slamming OpenAI's embedding API. Repos are freshly indexed at build time,
 # so this only catches code changes that happen while containers are running.

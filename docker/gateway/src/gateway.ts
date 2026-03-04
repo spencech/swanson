@@ -1,6 +1,8 @@
 import WebSocket, { WebSocketServer } from "ws";
 import express from "express";
 import http from "http";
+import { mkdirSync, appendFileSync, writeFileSync, readFileSync, existsSync } from "fs";
+import path from "path";
 import { classify } from "./classifier";
 import { ExpertPool } from "./expert-pool";
 import { ConsultationBroker } from "./consultation-broker";
@@ -187,6 +189,7 @@ wss.on("connection", (clientWs: WebSocket) => {
 
 			try {
 				let turnCount = 0;
+				let responseText = "";
 
 				// Connect to expert and proxy
 				const expertWs = await expertPool.connectToExpert(
@@ -210,8 +213,13 @@ wss.on("connection", (clientWs: WebSocket) => {
 								});
 							}
 
-							// Count assistant turns for observability
-							if (payload?.stream === "assistant" || payload?.data?.phase === "start") {
+							// Count assistant turns and accumulate response text
+							if (payload?.stream === "assistant") {
+								turnCount++;
+								if (payload?.data?.delta) {
+									responseText += payload.data.delta;
+								}
+							} else if (payload?.data?.phase === "start") {
 								turnCount++;
 							}
 
@@ -238,6 +246,11 @@ wss.on("connection", (clientWs: WebSocket) => {
 							// Final response (completed or error) — forward to client and close
 							const duration = Date.now() - startTime;
 							console.log(`[gateway] Request complete: expert=${expert}, session=${sessionKey}, turns=${turnCount}, duration=${duration}ms`);
+
+							// Write turn log for cross-expert thread context
+							if (sessionKey !== "main" && responseText.length > 0) {
+								writeTurnLog(sessionKey, expert, messageText!, responseText);
+							}
 							requestLogger.log({
 								ts: new Date().toISOString(),
 								type: "response",
@@ -284,8 +297,17 @@ wss.on("connection", (clientWs: WebSocket) => {
 					},
 				);
 
-				// Forward the original request to the expert in the internal protocol format
-				const internalReq = createAgentRequest(messageText, sessionKey);
+				// Prepend thread context hint if prior turns exist
+				let enrichedMessage = messageText;
+				if (sessionKey !== "main") {
+					const contextHint = getThreadHint(sessionKey);
+					if (contextHint) {
+						enrichedMessage = `${contextHint}\n\n${messageText}`;
+					}
+				}
+
+				// Forward the request to the expert in the internal protocol format
+				const internalReq = createAgentRequest(enrichedMessage, sessionKey);
 				expertWs.send(internalReq);
 			} catch (err) {
 				console.error(`[gateway] Failed to connect to expert ${expert}:`, (err as Error).message);
@@ -319,6 +341,62 @@ wss.on("connection", (clientWs: WebSocket) => {
 		console.error("[gateway] Client WS error:", err.message);
 	});
 });
+
+// ─── Thread turn log helpers ────────────────────────────────────────────────
+
+const THREADS_DIR = "/workspace/threads";
+
+function writeTurnLog(threadId: string, expert: string, question: string, response: string): void {
+	try {
+		const threadDir = path.join(THREADS_DIR, threadId);
+		mkdirSync(threadDir, { recursive: true });
+
+		// Determine sequence number from existing turns
+		const turnsPath = path.join(threadDir, "turns.jsonl");
+		let seq = 1;
+		if (existsSync(turnsPath)) {
+			const lines = readFileSync(turnsPath, "utf8").trim().split("\n").filter(Boolean);
+			seq = lines.length + 1;
+		}
+
+		// Write full response to separate file
+		const responseFile = `turn-${String(seq).padStart(3, "0")}-${expert}.md`;
+		writeFileSync(path.join(threadDir, responseFile), response, "utf8");
+
+		// Append metadata to turns.jsonl
+		const entry = JSON.stringify({
+			seq,
+			ts: new Date().toISOString(),
+			expert,
+			question: question.slice(0, 500),
+			responsePath: responseFile,
+			responseLen: response.length,
+		});
+		appendFileSync(turnsPath, entry + "\n", "utf8");
+		console.log(`[gateway] Turn log written: ${threadDir}/${responseFile} (${response.length} chars)`);
+	} catch (err) {
+		console.error(`[gateway] Failed to write turn log for thread ${threadId}:`, (err as Error).message);
+	}
+}
+
+function getThreadHint(threadId: string): string {
+	try {
+		const turnsPath = path.join(THREADS_DIR, threadId, "turns.jsonl");
+		if (!existsSync(turnsPath)) return "";
+
+		const lines = readFileSync(turnsPath, "utf8").trim().split("\n").filter(Boolean);
+		if (lines.length === 0) return "";
+
+		const experts = lines.map(l => {
+			try { return JSON.parse(l).expert; } catch { return "unknown"; }
+		});
+		const summary = experts.join(", ");
+
+		return `[Thread context: ${lines.length} prior turn(s) by ${summary}. Log: /workspace/threads/${threadId}/turns.jsonl]`;
+	} catch {
+		return "";
+	}
+}
 
 // ─── Start server ───────────────────────────────────────────────────────────
 

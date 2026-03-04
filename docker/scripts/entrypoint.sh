@@ -28,7 +28,6 @@ cat > "${OPENCLAW_HOME}/openclaw.json" << EOF
       "model": {
         "primary": "anthropic/claude-opus-4-6"
       },
-      "maxTurns": 30,
       "workspace": "/workspace",
       "repoRoot": "/workspace/repos"
     }

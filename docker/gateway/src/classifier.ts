@@ -34,8 +34,13 @@ export async function classify(message: string): Promise<ClassificationResult> {
 			system: CLASSIFIER_PROMPT,
 		});
 
-		const text = response.content[0]?.type === "text" ? response.content[0].text : "";
-		const parsed = JSON.parse(text.trim());
+		const rawText = response.content[0]?.type === "text" ? response.content[0].text : "";
+		console.log(`[classifier] Raw LLM response: ${JSON.stringify(rawText)}`);
+		// Strip code fences and extract JSON — Haiku often wraps in ```json ... ```
+		const stripped = rawText.replace(/```(?:json)?\s*/gi, "").trim();
+		const jsonMatch = stripped.match(/\{[\s\S]*\}/);
+		if (!jsonMatch) throw new Error(`No JSON object found in classifier response: ${rawText.slice(0, 200)}`);
+		const parsed = JSON.parse(jsonMatch[0]);
 
 		// Validate expert name
 		if (!EXPERTS.includes(parsed.expert)) {

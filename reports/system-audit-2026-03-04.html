@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swanson System Audit — March 4, 2026</title>
+<style>
+	@import url('https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+	:root {
+		--glass-bg: rgba(255, 255, 255, 0.12);
+		--glass-border: rgba(255, 255, 255, 0.18);
+		--glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+		--glass-blur: blur(24px);
+		--blue-primary: #007AFF;
+		--blue-vibrant: #0A84FF;
+		--blue-light: #64D2FF;
+		--blue-deep: #0040DD;
+		--green-ok: #30D158;
+		--orange-warn: #FF9F0A;
+		--red-error: #FF453A;
+		--purple-accent: #BF5AF2;
+		--text-primary: rgba(255, 255, 255, 0.95);
+		--text-secondary: rgba(255, 255, 255, 0.65);
+		--text-tertiary: rgba(255, 255, 255, 0.40);
+		--card-radius: 20px;
+		--transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	* { margin: 0; padding: 0; box-sizing: border-box; }
+
+	body {
+		font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+		background: linear-gradient(135deg, #0a0e27 0%, #1a1040 25%, #0d1b3e 50%, #0a2540 75%, #041525 100%);
+		color: var(--text-primary);
+		min-height: 100vh;
+		overflow-x: hidden;
+	}
+
+	/* Animated mesh gradient background */
+	body::before {
+		content: '';
+		position: fixed;
+		top: 0; left: 0; right: 0; bottom: 0;
+		background:
+			radial-gradient(ellipse 800px 600px at 20% 30%, rgba(0, 122, 255, 0.15), transparent),
+			radial-gradient(ellipse 600px 800px at 80% 70%, rgba(191, 90, 242, 0.1), transparent),
+			radial-gradient(ellipse 1000px 400px at 50% 90%, rgba(100, 210, 255, 0.08), transparent);
+		animation: meshShift 20s ease-in-out infinite alternate;
+		z-index: 0;
+		pointer-events: none;
+	}
+
+	@keyframes meshShift {
+		0% { transform: scale(1) translate(0, 0); }
+		50% { transform: scale(1.05) translate(-2%, 3%); }
+		100% { transform: scale(1) translate(2%, -2%); }
+	}
+
+	.container {
+		max-width: 1200px;
+		margin: 0 auto;
+		padding: 40px 24px;
+		position: relative;
+		z-index: 1;
+	}
+
+	/* Header */
+	.header {
+		text-align: center;
+		margin-bottom: 48px;
+	}
+
+	.header h1 {
+		font-size: 42px;
+		font-weight: 700;
+		background: linear-gradient(135deg, #fff 0%, var(--blue-light) 50%, var(--blue-vibrant) 100%);
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+		background-clip: text;
+		letter-spacing: -0.5px;
+		margin-bottom: 8px;
+	}
+
+	.header .subtitle {
+		font-size: 16px;
+		color: var(--text-secondary);
+		font-weight: 400;
+	}
+
+	.header .date {
+		display: inline-block;
+		margin-top: 12px;
+		padding: 6px 16px;
+		background: var(--glass-bg);
+		backdrop-filter: var(--glass-blur);
+		-webkit-backdrop-filter: var(--glass-blur);
+		border: 1px solid var(--glass-border);
+		border-radius: 100px;
+		font-size: 13px;
+		color: var(--text-secondary);
+	}
+
+	/* Glass card */
+	.card {
+		background: var(--glass-bg);
+		backdrop-filter: var(--glass-blur);
+		-webkit-backdrop-filter: var(--glass-blur);
+		border: 1px solid var(--glass-border);
+		border-radius: var(--card-radius);
+		padding: 28px;
+		margin-bottom: 24px;
+		box-shadow: var(--glass-shadow);
+		transition: var(--transition);
+		position: relative;
+		overflow: hidden;
+	}
+
+	.card::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 1px;
+		background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+	}
+
+	.card:hover {
+		border-color: rgba(255, 255, 255, 0.28);
+		box-shadow: 0 12px 48px rgba(0, 0, 0, 0.2);
+		transform: translateY(-2px);
+	}
+
+	.card-header {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-bottom: 20px;
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.card-header h2 {
+		font-size: 20px;
+		font-weight: 600;
+		flex: 1;
+	}
+
+	.card-header .toggle {
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(255,255,255,0.08);
+		border-radius: 8px;
+		font-size: 14px;
+		transition: var(--transition);
+	}
+
+	.card-header .toggle.open { transform: rotate(90deg); }
+
+	.card-body {
+		overflow: hidden;
+		transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+	}
+
+	.card-body.collapsed {
+		max-height: 0 !important;
+		opacity: 0;
+	}
+
+	/* Status badges */
+	.badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 12px;
+		border-radius: 100px;
+		font-size: 12px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.badge-ok { background: rgba(48, 209, 88, 0.15); color: var(--green-ok); }
+	.badge-warn { background: rgba(255, 159, 10, 0.15); color: var(--orange-warn); }
+	.badge-error { background: rgba(255, 69, 58, 0.15); color: var(--red-error); }
+	.badge-info { background: rgba(10, 132, 255, 0.15); color: var(--blue-vibrant); }
+
+	.badge::before {
+		content: '';
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: currentColor;
+	}
+
+	/* Metric grid */
+	.metrics {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 16px;
+		margin-bottom: 24px;
+	}
+
+	.metric {
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-radius: 16px;
+		padding: 20px;
+		text-align: center;
+		transition: var(--transition);
+	}
+
+	.metric:hover {
+		background: rgba(255, 255, 255, 0.08);
+		border-color: rgba(255, 255, 255, 0.15);
+	}
+
+	.metric .value {
+		font-size: 36px;
+		font-weight: 700;
+		background: linear-gradient(135deg, #fff, var(--blue-light));
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+		background-clip: text;
+	}
+
+	.metric .label {
+		font-size: 12px;
+		color: var(--text-secondary);
+		margin-top: 4px;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	/* Expert grid */
+	.expert-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+		gap: 12px;
+		margin: 16px 0;
+	}
+
+	.expert-card {
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-radius: 14px;
+		padding: 16px;
+		text-align: center;
+		transition: var(--transition);
+	}
+
+	.expert-card:hover {
+		background: rgba(255, 255, 255, 0.1);
+		transform: translateY(-2px);
+	}
+
+	.expert-card .name {
+		font-size: 16px;
+		font-weight: 600;
+		margin-bottom: 6px;
+		text-transform: capitalize;
+	}
+
+	.expert-card .role {
+		font-size: 11px;
+		color: var(--text-tertiary);
+		margin-bottom: 10px;
+	}
+
+	.expert-card .status-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		display: inline-block;
+		margin-right: 4px;
+	}
+
+	.expert-card .status-dot.online { background: var(--green-ok); box-shadow: 0 0 8px var(--green-ok); }
+	.expert-card .status-dot.idle { background: var(--orange-warn); }
+
+	/* Findings list */
+	.finding {
+		display: flex;
+		gap: 16px;
+		padding: 16px 0;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+	}
+
+	.finding:last-child { border-bottom: none; }
+
+	.finding-icon {
+		width: 40px;
+		height: 40px;
+		border-radius: 12px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 20px;
+		flex-shrink: 0;
+	}
+
+	.finding-icon.ok { background: rgba(48, 209, 88, 0.12); }
+	.finding-icon.warn { background: rgba(255, 159, 10, 0.12); }
+	.finding-icon.error { background: rgba(255, 69, 58, 0.12); }
+	.finding-icon.info { background: rgba(10, 132, 255, 0.12); }
+
+	.finding-content h3 {
+		font-size: 15px;
+		font-weight: 600;
+		margin-bottom: 4px;
+	}
+
+	.finding-content p {
+		font-size: 13px;
+		color: var(--text-secondary);
+		line-height: 1.5;
+	}
+
+	.finding-content code {
+		font-family: 'SF Mono', 'Fira Code', monospace;
+		font-size: 12px;
+		background: rgba(255, 255, 255, 0.08);
+		padding: 2px 6px;
+		border-radius: 4px;
+		color: var(--blue-light);
+	}
+
+	/* Log viewer */
+	.log-viewer {
+		background: rgba(0, 0, 0, 0.3);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-radius: 12px;
+		padding: 16px;
+		font-family: 'SF Mono', 'Fira Code', monospace;
+		font-size: 12px;
+		line-height: 1.6;
+		max-height: 300px;
+		overflow-y: auto;
+		color: var(--text-secondary);
+	}
+
+	.log-viewer::-webkit-scrollbar { width: 6px; }
+	.log-viewer::-webkit-scrollbar-track { background: transparent; }
+	.log-viewer::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+	.log-line { white-space: pre-wrap; word-break: break-all; }
+	.log-line .ts { color: var(--text-tertiary); }
+	.log-line .tag { color: var(--blue-vibrant); font-weight: 500; }
+	.log-line .ok { color: var(--green-ok); }
+	.log-line .warn { color: var(--orange-warn); }
+	.log-line .err { color: var(--red-error); }
+
+	/* Timeline */
+	.timeline {
+		position: relative;
+		padding-left: 32px;
+		margin: 16px 0;
+	}
+
+	.timeline::before {
+		content: '';
+		position: absolute;
+		left: 11px;
+		top: 0;
+		bottom: 0;
+		width: 2px;
+		background: linear-gradient(to bottom, var(--blue-vibrant), var(--purple-accent), transparent);
+	}
+
+	.timeline-item {
+		position: relative;
+		padding-bottom: 20px;
+	}
+
+	.timeline-item::before {
+		content: '';
+		position: absolute;
+		left: -25px;
+		top: 4px;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: var(--blue-vibrant);
+		border: 2px solid #0a0e27;
+		box-shadow: 0 0 0 2px var(--blue-vibrant);
+	}
+
+	.timeline-item .time {
+		font-size: 11px;
+		color: var(--text-tertiary);
+		font-family: 'SF Mono', monospace;
+	}
+
+	.timeline-item .event {
+		font-size: 14px;
+		margin-top: 4px;
+	}
+
+	/* Tab system */
+	.tabs {
+		display: flex;
+		gap: 4px;
+		margin-bottom: 20px;
+		background: rgba(255, 255, 255, 0.05);
+		border-radius: 12px;
+		padding: 4px;
+	}
+
+	.tab {
+		flex: 1;
+		padding: 10px 16px;
+		border: none;
+		background: transparent;
+		color: var(--text-secondary);
+		font-size: 13px;
+		font-weight: 500;
+		border-radius: 10px;
+		cursor: pointer;
+		transition: var(--transition);
+		font-family: inherit;
+	}
+
+	.tab:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.05); }
+	.tab.active {
+		background: rgba(255, 255, 255, 0.12);
+		color: var(--text-primary);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+	}
+
+	.tab-content { display: none; }
+	.tab-content.active { display: block; }
+
+	/* Table */
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 13px;
+	}
+
+	th {
+		text-align: left;
+		padding: 10px 12px;
+		color: var(--text-tertiary);
+		font-weight: 500;
+		font-size: 11px;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	td {
+		padding: 10px 12px;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+		color: var(--text-secondary);
+	}
+
+	tr:hover td { background: rgba(255, 255, 255, 0.03); }
+
+	/* Verdict bar */
+	.verdict-bar {
+		display: flex;
+		gap: 8px;
+		margin: 16px 0;
+		height: 8px;
+		border-radius: 4px;
+		overflow: hidden;
+	}
+
+	.verdict-bar .segment {
+		border-radius: 4px;
+		transition: var(--transition);
+	}
+
+	.verdict-bar .segment:hover { opacity: 0.8; }
+
+	/* Summary score */
+	.score-ring {
+		width: 120px;
+		height: 120px;
+		margin: 0 auto 16px;
+		position: relative;
+	}
+
+	.score-ring svg {
+		width: 100%;
+		height: 100%;
+		transform: rotate(-90deg);
+	}
+
+	.score-ring .track {
+		fill: none;
+		stroke: rgba(255, 255, 255, 0.08);
+		stroke-width: 8;
+	}
+
+	.score-ring .progress {
+		fill: none;
+		stroke: url(#scoreGradient);
+		stroke-width: 8;
+		stroke-linecap: round;
+		stroke-dasharray: 339.292;
+		transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	.score-ring .score-text {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		font-size: 32px;
+		font-weight: 700;
+	}
+
+	.score-ring .score-label {
+		position: absolute;
+		bottom: 15px;
+		left: 50%;
+		transform: translateX(-50%);
+		font-size: 10px;
+		color: var(--text-tertiary);
+		text-transform: uppercase;
+		letter-spacing: 1px;
+	}
+
+	/* Section separator */
+	.section-sep {
+		height: 1px;
+		background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+		margin: 20px 0;
+	}
+
+	/* Responsive */
+	@media (max-width: 768px) {
+		.container { padding: 20px 16px; }
+		.header h1 { font-size: 28px; }
+		.metrics { grid-template-columns: repeat(2, 1fr); }
+		.expert-grid { grid-template-columns: repeat(2, 1fr); }
+	}
+
+	/* Animated entrance */
+	.card { opacity: 0; transform: translateY(20px); animation: fadeUp 0.6s ease forwards; }
+	.card:nth-child(1) { animation-delay: 0.1s; }
+	.card:nth-child(2) { animation-delay: 0.2s; }
+	.card:nth-child(3) { animation-delay: 0.3s; }
+	.card:nth-child(4) { animation-delay: 0.4s; }
+	.card:nth-child(5) { animation-delay: 0.5s; }
+	.card:nth-child(6) { animation-delay: 0.6s; }
+
+	@keyframes fadeUp {
+		to { opacity: 1; transform: translateY(0); }
+	}
+
+	/* Pulse animation for live status dots */
+	@keyframes pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.5; }
+	}
+
+	.expert-card .status-dot.online { animation: pulse 2s ease-in-out infinite; }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+	<!-- SVG defs for gradient -->
+	<svg width="0" height="0" style="position:absolute">
+		<defs>
+			<linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+				<stop offset="0%" style="stop-color:var(--blue-vibrant)"/>
+				<stop offset="100%" style="stop-color:var(--blue-light)"/>
+			</linearGradient>
+		</defs>
+	</svg>
+
+	<!-- Header -->
+	<div class="header">
+		<h1>Swanson System Audit</h1>
+		<div class="subtitle">Multi-Expert Gateway Architecture Health Report</div>
+		<div class="date">March 4, 2026 &middot; Post-Deployment Analysis</div>
+	</div>
+
+	<!-- Overall Health -->
+	<div class="card">
+		<div class="card-header" onclick="toggleCard(this)">
+			<h2>System Health Overview</h2>
+			<span class="badge badge-warn">3 Issues</span>
+			<div class="toggle open">&#9654;</div>
+		</div>
+		<div class="card-body">
+			<div style="display:flex;align-items:center;gap:40px;flex-wrap:wrap;margin-bottom:24px">
+				<div class="score-ring">
+					<svg viewBox="0 0 120 120">
+						<circle class="track" cx="60" cy="60" r="54"/>
+						<circle class="progress" cx="60" cy="60" r="54" style="stroke-dashoffset: 101.8"/>
+					</svg>
+					<div class="score-text">70</div>
+					<div class="score-label">Health</div>
+				</div>
+				<div style="flex:1;min-width:200px">
+					<p style="font-size:14px;color:var(--text-secondary);line-height:1.6;margin-bottom:12px">
+						Core infrastructure is functional: session scoping, turn logging, and expert routing all work end-to-end.
+						Three issues need attention: the classifier always falls back to Ron (confidence: 0), the memory plugin isn't loading, and beads data isn't persisting across container restarts.
+					</p>
+					<div class="verdict-bar">
+						<div class="segment" style="flex:4;background:var(--green-ok)" title="4 systems working"></div>
+						<div class="segment" style="flex:3;background:var(--orange-warn)" title="3 issues found"></div>
+					</div>
+					<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-tertiary);margin-top:4px">
+						<span>4 systems working</span>
+						<span>3 issues to fix</span>
+					</div>
+				</div>
+			</div>
+
+			<div class="metrics">
+				<div class="metric">
+					<div class="value">2</div>
+					<div class="label">Requests Processed</div>
+				</div>
+				<div class="metric">
+					<div class="value">3:34 / 4:26</div>
+					<div class="label">Response Time (min)</div>
+				</div>
+				<div class="metric">
+					<div class="value">6 / 6</div>
+					<div class="label">Experts Online</div>
+				</div>
+				<div class="metric">
+					<div class="value">2</div>
+					<div class="label">Turn Logs Written</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- What's Working -->
+	<div class="card">
+		<div class="card-header" onclick="toggleCard(this)">
+			<h2>What's Working</h2>
+			<span class="badge badge-ok">Operational</span>
+			<div class="toggle open">&#9654;</div>
+		</div>
+		<div class="card-body">
+			<div class="finding">
+				<div class="finding-icon ok">&#10003;</div>
+				<div class="finding-content">
+					<h3>Per-Thread Session Scoping</h3>
+					<p>
+						Each conversation thread gets its own OpenClaw session via UUID-based keys. Two test requests received distinct sessions:
+						<code>64b7d86d-c540-4853-8eeb-19cc7d68184d</code> and <code>85f8ed22-170f-4547-aa06-ebb841655a2e</code>.
+						Ron's logs confirm lane isolation: <code>lane=session:agent:main:64b7d86d-...</code>
+					</p>
+				</div>
+			</div>
+
+			<div class="finding">
+				<div class="finding-icon ok">&#10003;</div>
+				<div class="finding-content">
+					<h3>Cross-Expert Turn Logging</h3>
+					<p>
+						The gateway successfully writes turn files to <code>/workspace/threads/</code>. Both test runs produced turn logs:
+						<code>turn-001-ron.md</code> (7,997 chars) and <code>turn-001-ron.md</code> (9,664 chars).
+						The <code>turns.jsonl</code> metadata tracks sequence, expert, question preview, and response length.
+					</p>
+				</div>
+			</div>
+
+			<div class="finding">
+				<div class="finding-icon ok">&#10003;</div>
+				<div class="finding-content">
+					<h3>WebSocket Proxy & Expert Communication</h3>
+					<p>
+						The gateway-to-expert WebSocket handshake works cleanly: connect challenge &rarr; auth &rarr; hello-ok &rarr; agent request.
+						Ron processed both requests and streamed responses back through the gateway. Full OpenClaw protocol compliance.
+					</p>
+				</div>
+			</div>
+
+			<div class="finding">
+				<div class="finding-icon ok">&#10003;</div>
+				<div class="finding-content">
+					<h3>Ron's Memory Protocol Compliance</h3>
+					<p>
+						Ron follows the SOUL.md memory protocol: "Let me start by pulling memory and querying the data" &rarr; executes 24+ tool calls
+						(recall, SQL queries, research search) &rarr; "Now let me save a memory bead and compose the response."
+						Both requests show this pattern consistently.
+					</p>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- What's Not Working -->
+	<div class="card">
+		<div class="card-header" onclick="toggleCard(this)">
+			<h2>Issues Found</h2>
+			<span class="badge badge-error">3 Issues</span>
+			<div class="toggle open">&#9654;</div>
+		</div>
+		<div class="card-body">
+
+			<div class="tabs">
+				<button class="tab active" onclick="switchTab(event, 'classifier-tab')">Classifier Bug</button>
+				<button class="tab" onclick="switchTab(event, 'memory-tab')">Memory Plugin</button>
+				<button class="tab" onclick="switchTab(event, 'beads-tab')">Beads State</button>
+			</div>
+
+			<div id="classifier-tab" class="tab-content active">
+				<div class="finding">
+					<div class="finding-icon error">!</div>
+					<div class="finding-content">
+						<h3>Classifier Returns confidence: 0 &mdash; All Requests Default to Ron</h3>
+						<p>
+							The LLM classifier (Haiku 4.5) wraps its JSON response in markdown code fences (<code>```json ... ```</code>),
+							but the extraction regex <code>/\{[^}]*\}/</code> fails to parse it. The catch block returns
+							<code>{ expert: "ron", confidence: 0.0, reason: "Classification error" }</code>.
+						</p>
+						<p style="margin-top:8px">
+							<strong>Impact:</strong> Every request routes to Ron regardless of content. Your multi-domain question (contracts + engagement + research)
+							should have been split across Ron (data), and Leslie (research), but instead Ron handled everything solo.
+						</p>
+						<p style="margin-top:8px">
+							<strong>Root cause:</strong> <code>classifier.ts:40</code> &mdash; regex <code>/\{[^}]*\}/</code> can't handle
+							code-fenced or multiline JSON. Haiku's response text is <code>```json\n{"expert":"ben",...}\n```</code>,
+							and the regex fails on the fence markers.
+						</p>
+						<p style="margin-top:8px;color:var(--green-ok)">
+							<strong>Fix applied:</strong> Updated regex to strip code fences first, then use <code>/\{[\s\S]*\}/</code> for multiline matching.
+						</p>
+					</div>
+				</div>
+
+				<div class="section-sep"></div>
+				<h3 style="font-size:13px;color:var(--text-tertiary);margin-bottom:12px">CLASSIFIER LOG EVIDENCE</h3>
+				<div class="log-viewer">
+<div class="log-line"><span class="tag">[classifier]</span> Raw LLM response: <span class="warn">```json</span></div>
+<div class="log-line"><span class="err">[classifier] Classification failed, defaulting to ron:</span> Error: No JSON object found in classifier response: ```json</div>
+<div class="log-line"><span class="tag">[gateway]</span> Classified &rarr; ron (<span class="warn">confidence: 0</span>, session: 64b7d86d-c540-...)</div>
+<div class="log-line"><span class="tag">[classifier]</span> Raw LLM response: <span class="warn">```json</span></div>
+<div class="log-line"><span class="err">[classifier] Classification failed, defaulting to ron:</span> Error: No JSON object found in classifier response: ```json</div>
+<div class="log-line"><span class="tag">[gateway]</span> Classified &rarr; ron (<span class="warn">confidence: 0</span>, session: 85f8ed22-170f-...)</div>
+				</div>
+			</div>
+
+			<div id="memory-tab" class="tab-content">
+				<div class="finding">
+					<div class="finding-icon warn">&#9888;</div>
+					<div class="finding-content">
+						<h3>Memory Plugin Not Loading in Expert Containers</h3>
+						<p>
+							All six expert containers log: <code>[plugins] memory slot plugin not found or not marked as memory: memory-core</code>.
+							OpenClaw can't find the <code>memory-core</code> plugin, meaning the dedicated recall/remember tools aren't available.
+						</p>
+						<p style="margin-top:8px">
+							Ron works around this by using the <code>exec</code> tool (shell commands) to run <code>bd recall</code> and <code>bd remember</code> directly.
+							This is the SOUL.md fallback path and it works &mdash; but it's less efficient than native tool calls.
+						</p>
+						<p style="margin-top:8px">
+							Additionally, the tools profile reports: <code>tools.profile (coding) allowlist contains unknown entries (apply_patch, memory_search, memory_get, cron)</code>.
+							These tool names are referenced in config but don't exist as registered plugins.
+						</p>
+					</div>
+				</div>
+
+				<div class="section-sep"></div>
+				<h3 style="font-size:13px;color:var(--text-tertiary);margin-bottom:12px">AFFECTED CONTAINERS</h3>
+				<div class="expert-grid">
+					<div class="expert-card">
+						<div class="name">Ron</div>
+						<div class="role" style="color:var(--orange-warn)">exec fallback</div>
+					</div>
+					<div class="expert-card">
+						<div class="name">Ben</div>
+						<div class="role" style="color:var(--red-error)">no memory</div>
+					</div>
+					<div class="expert-card">
+						<div class="name">Leslie</div>
+						<div class="role" style="color:var(--red-error)">no memory</div>
+					</div>
+					<div class="expert-card">
+						<div class="name">Tom</div>
+						<div class="role" style="color:var(--red-error)">no memory</div>
+					</div>
+					<div class="expert-card">
+						<div class="name">Ann</div>
+						<div class="role" style="color:var(--red-error)">no memory</div>
+					</div>
+					<div class="expert-card">
+						<div class="name">April</div>
+						<div class="role" style="color:var(--red-error)">no memory</div>
+					</div>
+				</div>
+			</div>
+
+			<div id="beads-tab" class="tab-content">
+				<div class="finding">
+					<div class="finding-icon warn">&#9888;</div>
+					<div class="finding-content">
+						<h3>Beads State: 0 Open Issues Across All Experts</h3>
+						<p>
+							Every expert container reports <code>Beads OK: 0 open memories</code>. Despite Ron claiming to "save a memory bead"
+							in both responses, no beads persist in any container's Dolt database. This could mean:
+						</p>
+						<p style="margin-top:8px">
+							1. <strong>bd sync is deprecated</strong> &mdash; containers log <code>bd sync is deprecated. Use 'bd dolt push' and 'bd dolt pull' instead</code>.
+							The entrypoint still calls <code>bd sync</code>, which may not actually commit data.<br>
+							2. <strong>Dolt DB lost between restarts</strong> &mdash; Leslie's container hit the REIMPORT path, confirming ephemeral Dolt state.<br>
+							3. <strong>Ron's bd commands may silently fail</strong> &mdash; the exec tool logs show calls completing but we can't see the output.
+						</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Expert Status -->
+	<div class="card">
+		<div class="card-header" onclick="toggleCard(this)">
+			<h2>Expert Container Status</h2>
+			<span class="badge badge-ok">All Online</span>
+			<div class="toggle open">&#9654;</div>
+		</div>
+		<div class="card-body">
+			<div class="expert-grid">
+				<div class="expert-card">
+					<div><span class="status-dot online"></span></div>
+					<div class="name">Ron</div>
+					<div class="role">Code &amp; Architecture</div>
+					<div style="margin-top:8px">
+						<span class="badge badge-info">2 requests</span>
+					</div>
+				</div>
+				<div class="expert-card">
+					<div><span class="status-dot online"></span></div>
+					<div class="name">Ben</div>
+					<div class="role">SQL &amp; Analytics</div>
+					<div style="margin-top:8px">
+						<span class="badge badge-info">0 requests</span>
+					</div>
+				</div>
+				<div class="expert-card">
+					<div><span class="status-dot online"></span></div>
+					<div class="name">Leslie</div>
+					<div class="role">Research &amp; Coaching</div>
+					<div style="margin-top:8px">
+						<span class="badge badge-info">0 requests</span>
+					</div>
+				</div>
+				<div class="expert-card">
+					<div><span class="status-dot online"></span></div>
+					<div class="name">Tom</div>
+					<div class="role">Sales &amp; CRM</div>
+					<div style="margin-top:8px">
+						<span class="badge badge-info">0 requests</span>
+					</div>
+				</div>
+				<div class="expert-card">
+					<div><span class="status-dot online"></span></div>
+					<div class="name">Ann</div>
+					<div class="role">BI &amp; Metrics</div>
+					<div style="margin-top:8px">
+						<span class="badge badge-info">0 requests</span>
+					</div>
+				</div>
+				<div class="expert-card">
+					<div><span class="status-dot online"></span></div>
+					<div class="name">April</div>
+					<div class="role">DevOps &amp; Infra</div>
+					<div style="margin-top:8px">
+						<span class="badge badge-info">0 requests</span>
+					</div>
+				</div>
+			</div>
+
+			<div class="section-sep"></div>
+
+			<table>
+				<thead>
+					<tr>
+						<th>Expert</th>
+						<th>Beads Init</th>
+						<th>Memory Plugin</th>
+						<th>Requests</th>
+						<th>Tool Calls</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td style="font-weight:600">Ron</td>
+						<td><span style="color:var(--green-ok)">Synced</span></td>
+						<td><span style="color:var(--orange-warn)">exec fallback</span></td>
+						<td>2</td>
+						<td>24+ (exec)</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600">Ben</td>
+						<td><span style="color:var(--green-ok)">Synced (wait)</span></td>
+						<td><span style="color:var(--red-error)">Missing</span></td>
+						<td>0</td>
+						<td>0</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600">Leslie</td>
+						<td><span style="color:var(--green-ok)">Reimported</span></td>
+						<td><span style="color:var(--red-error)">Missing</span></td>
+						<td>0</td>
+						<td>0</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600">Tom</td>
+						<td><span style="color:var(--green-ok)">Synced (wait)</span></td>
+						<td><span style="color:var(--red-error)">Missing</span></td>
+						<td>0</td>
+						<td>0</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600">Ann</td>
+						<td><span style="color:var(--green-ok)">Synced (wait)</span></td>
+						<td><span style="color:var(--red-error)">Missing</span></td>
+						<td>0</td>
+						<td>0</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600">April</td>
+						<td><span style="color:var(--green-ok)">Synced (wait)</span></td>
+						<td><span style="color:var(--red-error)">Missing</span></td>
+						<td>0</td>
+						<td>0</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</div>
+
+	<!-- Request Timeline -->
+	<div class="card">
+		<div class="card-header" onclick="toggleCard(this)">
+			<h2>Request Timeline</h2>
+			<span class="badge badge-info">2 Requests</span>
+			<div class="toggle open">&#9654;</div>
+		</div>
+		<div class="card-body">
+			<div class="tabs">
+				<button class="tab active" onclick="switchTab(event, 'req1-tab')">Request #1 (3:34)</button>
+				<button class="tab" onclick="switchTab(event, 'req2-tab')">Request #2 (4:26)</button>
+			</div>
+
+			<div id="req1-tab" class="tab-content active">
+				<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px">
+					<div><span style="color:var(--text-tertiary);font-size:12px">Session</span><br><code>64b7d86d-...</code></div>
+					<div><span style="color:var(--text-tertiary);font-size:12px">Expert</span><br><span style="color:var(--blue-vibrant);font-weight:600">Ron</span></div>
+					<div><span style="color:var(--text-tertiary);font-size:12px">Confidence</span><br><span style="color:var(--red-error);font-weight:600">0 (error fallback)</span></div>
+					<div><span style="color:var(--text-tertiary);font-size:12px">Duration</span><br><strong>3m 23s</strong></div>
+					<div><span style="color:var(--text-tertiary);font-size:12px">Agent Turns</span><br><strong>783</strong></div>
+					<div><span style="color:var(--text-tertiary);font-size:12px">Response</span><br><strong>7,997 chars</strong></div>
+				</div>
+
+				<div class="timeline">
+					<div class="timeline-item">
+						<div class="time">16:57:49.408</div>
+						<div class="event">Request received, classifier invoked</div>
+					</div>
+					<div class="timeline-item">
+						<div class="time">16:57:49.409</div>
+						<div class="event">Classifier failed &rarr; defaulted to <strong>Ron</strong> (confidence: 0)</div>
+					</div>
+					<div class="timeline-item">
+						<div class="time">16:57:49.568</div>
+						<div class="event">Ron agent run started (Opus 4.6, adaptive thinking)</div>
+					</div>
+					<div class="timeline-item">
+						<div class="time">16:57:53.216</div>
+						<div class="event">"Let me start by pulling memory and querying the data"</div>
+					</div>
+					<div class="timeline-item">
+						<div class="time">16:57:55 &ndash; 16:58:51</div>
+						<div class="event">24+ <code>exec</code> tool calls (recall, SQL queries, research search)</div>
+					</div>
+					<div class="timeline-item">
+						<div class="time">17:00:24.871</div>
+						<div class="event">"Now let me save a memory bead and respond"</div>
+					</div>
+					<div class="timeline-item">
+						<div class="time">17:01:10.324</div>
+						<div class="event">Final response sent &mdash; <code>turn-001-ron.md</code> written (7,997 chars)</div>
+					</div>
+				</div>
+			</div>
+
+			<div id="req2-tab" class="tab-content">
+				<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px">
+					<div><span style="color:var(--text-tertiary);font-size:12px">Session</span><br><code>85f8ed22-...</code></div>
+					<div><span style="color:var(--text-tertiary);font-size:12px">Expert</span><br><span style="color:var(--blue-vibrant);font-weight:600">Ron</span></div>
+					<div><span style="color:var(--text-tertiary);font-size:12px">Confidence</span><br><span style="color:var(--red-error);font-weight:600">0 (error fallback)</span></div>
+					<div><span style="color:var(--text-tertiary);font-size:12px">Duration</span><br><strong>4m 26s</strong></div>
+					<div><span style="color:var(--text-tertiary);font-size:12px">Agent Turns</span><br><strong>945</strong></div>
+					<div><span style="color:var(--text-tertiary);font-size:12px">Response</span><br><strong>9,664 chars</strong></div>
+				</div>
+
+				<div class="timeline">
+					<div class="timeline-item">
+						<div class="time">17:02:01.945</div>
+						<div class="event">Request received, classifier invoked</div>
+					</div>
+					<div class="timeline-item">
+						<div class="time">17:02:01.946</div>
+						<div class="event">Classifier failed &rarr; defaulted to <strong>Ron</strong> (confidence: 0)</div>
+					</div>
+					<div class="timeline-item">
+						<div class="time">17:02:06.782</div>
+						<div class="event">"Let me start by pulling memory context, then dig into the data"</div>
+					</div>
+					<div class="timeline-item">
+						<div class="time">17:02:06 &ndash; 17:05:39</div>
+						<div class="event">Agent processing (SQL queries, research search, data analysis)</div>
+					</div>
+					<div class="timeline-item">
+						<div class="time">17:05:39.986</div>
+						<div class="event">"Now let me save a memory bead and compose the response"</div>
+					</div>
+					<div class="timeline-item">
+						<div class="time">17:06:25.344</div>
+						<div class="event">Final response sent &mdash; <code>turn-001-ron.md</code> written (9,664 chars)</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Ron's Response Quality -->
+	<div class="card">
+		<div class="card-header" onclick="toggleCard(this)">
+			<h2>Response Quality: Ron's Output</h2>
+			<span class="badge badge-ok">High Quality</span>
+			<div class="toggle open">&#9654;</div>
+		</div>
+		<div class="card-body">
+			<p style="font-size:14px;color:var(--text-secondary);line-height:1.6;margin-bottom:16px">
+				Despite the classifier bug routing everything to him, Ron handled the multi-domain question competently.
+				He queried the database for contracts, pulled engagement scores, and cited Upbeat research &mdash; work that
+				would normally span Ron (data), Ben (SQL), and Leslie (research). The response quality was high:
+			</p>
+
+			<div class="finding">
+				<div class="finding-icon ok">&#10003;</div>
+				<div class="finding-content">
+					<h3>Identified Three Largest Contracts</h3>
+					<p>Austin ISD, Greenville County Schools, Prince William County Schools &mdash; correctly sized by active employee headcount as a proxy for contract scale.</p>
+				</div>
+			</div>
+
+			<div class="finding">
+				<div class="finding-icon ok">&#10003;</div>
+				<div class="finding-content">
+					<h3>Engagement Data with Year-over-Year Comparison</h3>
+					<p>Produced detailed HTML tables with Fall 2024 vs Fall 2025 scores across all engagement categories, with change deltas highlighted. Top movers: Compensation (+8/+9), Work/Life Balance (+7/+5), Belonging (+3).</p>
+				</div>
+			</div>
+
+			<div class="finding">
+				<div class="finding-icon ok">&#10003;</div>
+				<div class="finding-content">
+					<h3>Research Integration</h3>
+					<p>Cited Upbeat's own research base (Belonging & Wellbeing report, retention studies, Loeb et al. 2005, Ingersoll 2001) to explain why the gains matter. Connected engagement improvements to retention predictions.</p>
+				</div>
+			</div>
+
+			<div class="finding">
+				<div class="finding-icon info">&#8505;</div>
+				<div class="finding-content">
+					<h3>Design Note</h3>
+					<p>
+						The current architecture routes to ONE expert per request. Even with the classifier fixed, a multi-domain question
+						like "contracts + engagement + research" will go to whichever expert scores highest. To truly split across experts,
+						the gateway would need a multi-route capability &mdash; a future enhancement worth considering.
+					</p>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Recommendations -->
+	<div class="card">
+		<div class="card-header" onclick="toggleCard(this)">
+			<h2>Recommendations</h2>
+			<div class="toggle open">&#9654;</div>
+		</div>
+		<div class="card-body">
+			<div class="finding">
+				<div class="finding-icon error">1</div>
+				<div class="finding-content">
+					<h3>Rebuild Gateway to Deploy Classifier Fix</h3>
+					<p>
+						The regex fix in <code>classifier.ts</code> has been applied locally. Run <code>docker compose up -d --build chris</code>
+						to deploy. This will restore proper expert routing based on message content.
+					</p>
+				</div>
+			</div>
+
+			<div class="finding">
+				<div class="finding-icon warn">2</div>
+				<div class="finding-content">
+					<h3>Investigate Memory Plugin Registration</h3>
+					<p>
+						The <code>memory-core</code> plugin isn't being found by OpenClaw. Either the plugin path in the entrypoint config
+						needs updating, or the plugin needs to be registered differently. For now, the <code>exec</code> fallback works
+						but native tools would be more efficient.
+					</p>
+				</div>
+			</div>
+
+			<div class="finding">
+				<div class="finding-icon warn">3</div>
+				<div class="finding-content">
+					<h3>Update Entrypoint to Use <code>bd dolt push/pull</code></h3>
+					<p>
+						Replace <code>bd sync</code> calls with the non-deprecated <code>bd dolt push</code> and <code>bd dolt pull</code> commands.
+						The deprecation warning suggests <code>bd sync</code> may not actually persist data.
+					</p>
+				</div>
+			</div>
+
+			<div class="finding">
+				<div class="finding-icon info">4</div>
+				<div class="finding-content">
+					<h3>Consider Multi-Expert Routing for Complex Questions</h3>
+					<p>
+						The current architecture picks one expert per request. For questions that span multiple domains,
+						the gateway could fan out to multiple experts and aggregate responses. This is a significant
+						architectural change but would improve answer quality for cross-domain questions.
+					</p>
+				</div>
+			</div>
+		</div>
+	</div>
+
+</div>
+
+<script>
+function toggleCard(header) {
+	const body = header.nextElementSibling;
+	const toggle = header.querySelector('.toggle');
+	body.classList.toggle('collapsed');
+	toggle.classList.toggle('open');
+}
+
+function switchTab(event, tabId) {
+	const card = event.target.closest('.card-body');
+	card.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+	card.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+	event.target.classList.add('active');
+	document.getElementById(tabId).classList.add('active');
+}
+
+// Animate score ring on load
+document.addEventListener('DOMContentLoaded', () => {
+	const progress = document.querySelector('.score-ring .progress');
+	if (progress) {
+		// 70% = 339.292 * 0.3 = ~101.8 offset (already set via inline style)
+		// Animate from full offset to target
+		const circumference = 339.292;
+		const target = circumference * (1 - 0.70);
+		progress.style.strokeDashoffset = circumference;
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				progress.style.strokeDashoffset = target;
+			});
+		});
+	}
+});
+</script>
+
+</body>
+</html>

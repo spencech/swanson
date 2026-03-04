@@ -36,6 +36,7 @@ let mainWindowRef: BrowserWindow | null = null;
 let chatRunning = false;
 let currentMessageId: string | null = null;
 let fullContent = "";
+let currentExpert: string | null = null;
 
 const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_RECONNECT_DELAY_MS = 1000;
@@ -91,6 +92,10 @@ function sendToRenderer(type: WSMessageType, payload: unknown): void {
 	mainWindowRef.webContents.send("openclaw-message", message);
 }
 
+function chatPayload(fields: IChatPayload): IChatPayload {
+	return { ...fields, expert: currentExpert || undefined };
+}
+
 // ─── WebSocket Message Handler ──────────────────────────────────────────────────
 
 function handleMessage(raw: WebSocket.Data): void {
@@ -130,12 +135,12 @@ function handleMessage(raw: WebSocket.Data): void {
 						fullContent = text;
 					}
 				}
-				sendToRenderer("chat", {
+				sendToRenderer("chat", chatPayload({
 					content: fullContent,
 					delta: false,
 					done: true,
 					messageId: currentMessageId,
-				} as IChatPayload);
+				}));
 				chatRunning = false;
 				currentMessageId = null;
 				fullContent = "";
@@ -155,8 +160,24 @@ function handleMessage(raw: WebSocket.Data): void {
 			return;
 		}
 
+		// Routing announcement — gateway classified the message
+		if (event === "routing" && payload) {
+			currentExpert = (payload as Record<string, unknown>).primary as string || (payload as Record<string, unknown>).expert as string;
+			sendToRenderer("routing", payload);
+			return;
+		}
+
+		// Fan-out events — forward to renderer
+		if (event === "fanout.start" || event === "fanout.progress" || event === "fanout.synthesizing") {
+			sendToRenderer(event as WSMessageType, payload || {});
+			return;
+		}
+
 		// Agent streaming events
 		if (event === "agent" && payload) {
+			// Read expert identity stamped by gateway
+			const topLevelExpert = (msg as Record<string, unknown>).expert as string | undefined;
+			if (topLevelExpert) currentExpert = topLevelExpert;
 			handleAgentEvent(payload);
 			return;
 		}
@@ -208,27 +229,33 @@ function handleAgentEvent(payload: Record<string, unknown>): void {
 	// Lifecycle events
 	if (stream === "lifecycle") {
 		if (phase === "start") {
-			// Agent run started — send initial chat indicator if we haven't already
+			// Agent run started (or restarted after auto-retry)
+			// If we don't have a message yet, the start indicator was already sent.
+			// If we DO have a message (retry after error), just keep streaming into it.
 			return;
 		}
-		if (phase === "end" || phase === "error") {
+		if (phase === "end") {
 			// Agent run finished — mark stream done
 			// (final res handler will also fire and deliver any content missed by streaming)
 			if (chatRunning && currentMessageId) {
-				sendToRenderer("chat", {
+				sendToRenderer("chat", chatPayload({
 					content: fullContent,
 					delta: false,
 					done: true,
 					messageId: currentMessageId,
-				} as IChatPayload);
+				}));
 				chatRunning = false;
 				currentMessageId = null;
 				fullContent = "";
 			}
-			if (phase === "error") {
-				const errorMsg = (data?.error as string) || "Agent run failed";
-				sendToRenderer("error", { code: "AGENT_ERROR", message: errorMsg });
-			}
+			return;
+		}
+		if (phase === "error") {
+			// Transient error — OpenClaw may auto-retry, so do NOT kill the stream.
+			// Just forward the error as a non-terminal notification.
+			const errorMsg = (data?.error as string) || "Agent run failed";
+			console.warn(`[ws-client] Agent error (may retry): ${errorMsg}`);
+			sendToRenderer("error", { code: "AGENT_ERROR", message: errorMsg });
 			return;
 		}
 	}
@@ -236,12 +263,12 @@ function handleAgentEvent(payload: Record<string, unknown>): void {
 	// Assistant text deltas
 	if (stream === "assistant" && delta && currentMessageId) {
 		fullContent += delta;
-		sendToRenderer("chat", {
+		sendToRenderer("chat", chatPayload({
 			content: delta,
 			delta: true,
 			done: false,
 			messageId: currentMessageId,
-		} as IChatPayload);
+		}));
 		return;
 	}
 
@@ -253,13 +280,13 @@ function handleAgentEvent(payload: Record<string, unknown>): void {
 
 		// Snapshot accumulated text as an intermediate step before tool starts
 		if (isStart && fullContent.trim() && currentMessageId) {
-			sendToRenderer("chat", {
+			sendToRenderer("chat", chatPayload({
 				content: fullContent,
 				segmentBreak: true,
 				delta: false,
 				done: false,
 				messageId: currentMessageId,
-			} as IChatPayload);
+			}));
 			fullContent = "";
 		}
 
@@ -276,16 +303,17 @@ function handleAgentEvent(payload: Record<string, unknown>): void {
 
 function cleanUpStream(): void {
 	if (chatRunning && currentMessageId) {
-		sendToRenderer("chat", {
+		sendToRenderer("chat", chatPayload({
 			content: fullContent,
 			delta: false,
 			done: true,
 			messageId: currentMessageId,
-		} as IChatPayload);
+		}));
 	}
 	chatRunning = false;
 	currentMessageId = null;
 	fullContent = "";
+	currentExpert = null;
 }
 
 // ─── Connection Management ─────────────────────────────────────────────────────
@@ -534,12 +562,12 @@ export async function sendChat(
 	chatRunning = true;
 
 	// Send start indicator to renderer
-	sendToRenderer("chat", {
+	sendToRenderer("chat", chatPayload({
 		content: "",
 		delta: false,
 		done: false,
 		messageId,
-	} as IChatPayload);
+	}));
 
 	try {
 		// Send agent request via WebSocket

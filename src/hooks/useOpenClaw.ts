@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
 import { useChatStore } from '../stores/chatStore'
 import { usePlanStore } from '../stores/planStore'
-import type { IWSMessage, IChatPayload, IStatusPayload, IErrorPayload, IPlanUpdatePayload, IPlanApprovedPayload, IPlanYamlPayload, IToolActivityPayload } from '../../shared/types'
+import type { IWSMessage, IChatPayload, IStatusPayload, IErrorPayload, IPlanUpdatePayload, IPlanApprovedPayload, IPlanYamlPayload, IToolActivityPayload, IRoutingPayload, IFanoutProgressPayload } from '../../shared/types'
 
 const TOOL_LABELS: Record<string, string> = {
   search_semantic: "Searching code by concept",
@@ -54,6 +54,33 @@ export function useOpenClaw() {
       console.log(`[useOpenClaw] message — type=${msg.type}`, logPayload)
 
       switch (msg.type) {
+        case 'routing': {
+          const payload = msg.payload as IRoutingPayload
+          addMessage({
+            role: 'system',
+            content: payload.primary,
+            expert: payload.primary,
+          })
+          break
+        }
+
+        case 'fanout.start': {
+          // Fan-out started — tool activity will show progress via fanout.progress
+          break
+        }
+
+        case 'fanout.progress': {
+          const payload = msg.payload as IFanoutProgressPayload
+          setToolActivity(`${payload.expert}: ${payload.status} (${payload.completed}/${payload.total})`)
+          if (payload.completed === payload.total) setToolActivity(null)
+          break
+        }
+
+        case 'fanout.synthesizing': {
+          setToolActivity("Synthesizing expert responses...")
+          break
+        }
+
         case 'chat': {
           const payload = msg.payload as IChatPayload
 
@@ -82,6 +109,7 @@ export function useOpenClaw() {
                 role: 'assistant',
                 content: payload.content,
                 isStreaming: true,
+                expert: payload.expert,
               })
               currentMessageIdRef.current = messageId
             } else {
@@ -95,6 +123,7 @@ export function useOpenClaw() {
               role: 'assistant',
               content: '',
               isStreaming: true,
+              expert: payload.expert,
             })
             currentMessageIdRef.current = messageId
           }

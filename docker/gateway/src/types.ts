@@ -1,7 +1,18 @@
 export interface ClassificationResult {
-	expert: string;
+	primary: string;
+	supporting: string[];
+	focus: Record<string, string>;
 	confidence: number;
 	reason: string;
+}
+
+export interface ExpertResponse {
+	expert: ExpertName;
+	status: "pending" | "streaming" | "complete" | "failed";
+	responseText: string;
+	startedAt: number;
+	completedAt?: number;
+	error?: string;
 }
 
 export interface ConsultationRequest {

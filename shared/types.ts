@@ -113,7 +113,12 @@ export type WSMessageType =
   | "status"
   | "error"
   | "tool_activity"
-  | "auth";
+  | "routing"
+  | "auth"
+  // Fan-out events
+  | "fanout.start"
+  | "fanout.progress"
+  | "fanout.synthesizing";
 
 export interface IWSMessage {
   type: WSMessageType;
@@ -130,7 +135,29 @@ export interface IChatPayload {
   done?: boolean;
   messageId?: string;
   segmentBreak?: boolean;
+  expert?: string;
 }
+
+export interface IRoutingPayload {
+  mode: "single" | "multi";
+  primary: string;
+  supporting: string[];
+  confidence: number;
+  reason: string;
+}
+
+export interface IFanoutStartPayload {
+  experts: string[];
+}
+
+export interface IFanoutProgressPayload {
+  expert: string;
+  status: string;
+  total: number;
+  completed: number;
+}
+
+export interface IFanoutSynthesizingPayload {}
 
 // ─── Plan Payloads ─────────────────────────────────────────────────────────────
 
@@ -267,7 +294,11 @@ export interface IWSPayloadMap {
   "status": IStatusPayload;
   "error": IErrorPayload;
   "tool_activity": IToolActivityPayload;
+  "routing": IRoutingPayload;
   "auth": IAuthPayload;
+  "fanout.start": IFanoutStartPayload;
+  "fanout.progress": IFanoutProgressPayload;
+  "fanout.synthesizing": IFanoutSynthesizingPayload;
 }
 
 // Type-safe message constructor

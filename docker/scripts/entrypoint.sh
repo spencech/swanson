@@ -34,7 +34,7 @@ cat > "${OPENCLAW_HOME}/openclaw.json" << EOF
   },
   "plugins": {
     "enabled": true,
-    "allow": ["swanson-tools"],
+    "allow": ["swanson-tools", "memory-core"],
     "load": {
       "paths": ["/workspace/extensions"]
     }
@@ -75,7 +75,7 @@ cd "$MEMORY_REPO"
 git config user.email "${EXPERT_NAME:-swanson}@teachupbeat.com"
 git config user.name "${EXPERT_NAME:-Swanson} Agent"
 
-# Unshallow the clone so bd sync can push (clone-repos uses --depth 1)
+# Unshallow the clone so bd dolt push can push (clone-repos uses --depth 1)
 git fetch --unshallow 2>/dev/null || true
 
 # Clean up any no-db workaround from prior failed starts
@@ -147,7 +147,7 @@ if [ "$LOCK_ACQUIRED" = true ]; then
     fi
   else
     echo "=== [SYNC] Beads memory graph found with Dolt DB intact ==="
-    bd sync 2>/dev/null || true
+    bd dolt pull 2>/dev/null || true
   fi
   # Ensure beads runtime files are gitignored (prevents merge conflicts on git pull)
   cd "$MEMORY_REPO"
@@ -167,8 +167,8 @@ GITIGNORE
   echo "=== [LOCK] Released beads init lock ==="
 else
   echo "=== [SKIP] Beads initialization handled by another container ==="
-  # Still sync to get latest state
-  bd sync 2>/dev/null || true
+  # Still pull to get latest state
+  bd dolt pull 2>/dev/null || true
 fi
 
 # Health check: verify beads is functional
@@ -203,8 +203,11 @@ echo "Repos available: ${REPO_COUNT}"
 INDEX_COUNT=$(find /workspace/repos -name ".chunkhound" -type d 2>/dev/null | wc -l)
 echo "ChunkHound indexes: ${INDEX_COUNT}"
 
+# Ensure OpenClaw memory directory exists (memory-core plugin indexes files here)
+mkdir -p /workspace/memory
+
 # Verify persistence directories are writable
-for dir in threads plans sessions; do
+for dir in threads plans sessions memory; do
   if [ -w "/workspace/${dir}" ]; then
     echo "  /workspace/${dir} — writable"
   else

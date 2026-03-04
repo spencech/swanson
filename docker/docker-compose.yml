@@ -37,6 +37,7 @@ x-expert-base: &expert-base
     - swanson-threads:/workspace/threads
     - swanson-plans:/workspace/plans
     - swanson-sessions:/workspace/sessions
+    - swanson-memory:/workspace/memory
   healthcheck:
     test: ["CMD-SHELL", "curl -sf http://localhost:18789/v1/models -H 'Authorization: Bearer ${OPENCLAW_INTERNAL_TOKEN:-expert-internal-token}'"]
     interval: 30s
@@ -86,6 +87,7 @@ services:
       - swanson-threads:/workspace/threads
       - swanson-plans:/workspace/plans
       - swanson-sessions:/workspace/sessions
+      - swanson-memory:/workspace/memory
 
   # ─── Ben Wyatt (Data & Reports) ──────────────────────────────────────────
   ben:
@@ -100,6 +102,7 @@ services:
       - swanson-threads:/workspace/threads
       - swanson-plans:/workspace/plans
       - swanson-sessions:/workspace/sessions
+      - swanson-memory:/workspace/memory
 
   # ─── Leslie Knope (Research & Coaching) ───────────────────────────────────
   leslie:
@@ -114,6 +117,7 @@ services:
       - swanson-threads:/workspace/threads
       - swanson-plans:/workspace/plans
       - swanson-sessions:/workspace/sessions
+      - swanson-memory:/workspace/memory
 
   # ─── Tom Haverford (Sales & Marketing) ────────────────────────────────────
   tom:
@@ -128,6 +132,7 @@ services:
       - swanson-threads:/workspace/threads
       - swanson-plans:/workspace/plans
       - swanson-sessions:/workspace/sessions
+      - swanson-memory:/workspace/memory
 
   # ─── Ann Perkins (Business Intelligence) ──────────────────────────────────
   ann:
@@ -142,6 +147,7 @@ services:
       - swanson-threads:/workspace/threads
       - swanson-plans:/workspace/plans
       - swanson-sessions:/workspace/sessions
+      - swanson-memory:/workspace/memory
 
   # ─── April Ludgate (Operations) ──────────────────────────────────────────
   april:
@@ -156,9 +162,11 @@ services:
       - swanson-threads:/workspace/threads
       - swanson-plans:/workspace/plans
       - swanson-sessions:/workspace/sessions
+      - swanson-memory:/workspace/memory
 
 volumes:
   swanson-threads:
   swanson-plans:
   swanson-sessions:
+  swanson-memory:
   swanson-logs:

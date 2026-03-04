@@ -1,11 +1,18 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ClassificationResult, EXPERTS } from "./types";
 
-const CLASSIFIER_PROMPT = `Route the message to one expert. Reply with ONLY a single-line JSON object, no markdown.
+const CLASSIFIER_PROMPT = `Route the message to one Upbeat platform expert. Reply with ONLY a JSON object, no markdown.
 
-Experts: ron=code/architecture, ben=SQL/data/analytics, leslie=research/coaching, tom=sales/CRM, ann=BI/trends/metrics, april=devops/infra
+- ron: Codebase, architecture, features, implementation, spawnee templates
+- ben: SQL queries, database schema, data exports, raw data pulls
+- leslie: Education research, coaching strategies, teacher retention literature, toolkit resources
+- tom: Sales pipeline, NEW prospects, lead generation, marketing campaigns
+- ann: Engagement scores, survey results, district/contract analytics, trends, dashboards, cross-domain analysis
+- april: Infrastructure, Docker, deployments, DevOps, CI/CD, monitoring
 
-{"expert":"name","confidence":0.0-1.0,"reason":"max 5 words"}`;
+Context: "contracts" and "districts" refer to school district accounts with engagement data (ann), NOT sales leads (tom). Questions about engagement scores, survey results, or research insights go to ann or leslie, not tom.
+
+{"expert":"name","confidence":0.0-1.0,"reason":"5 words max"}`;
 
 let anthropicClient: Anthropic | null = null;
 
